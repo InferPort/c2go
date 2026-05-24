@@ -11,7 +11,7 @@ import (
 
 const (
 	AppName     = "c2go"
-	ServiceName = "com.nicolas.c2go"
+	ServiceName = "com.inferport.c2go"
 	TokenKey    = "cloudflare_token"
 )
 

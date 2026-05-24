@@ -8,7 +8,7 @@ Featuring a modern and interactive Terminal User Interface (TUI) setup wizard, i
 
 ## Key Features
 
-- 🔐 **OS Keyring Security**: Uses your operating system's secure keyring (`go-keyring`) to store your Cloudflare API token (under service name `com.nicolas.c2go`). No plaintext tokens are left in configuration files or code repository commits!
+- 🔐 **OS Keyring Security**: Uses your operating system's secure keyring (`go-keyring`) to store your Cloudflare API token (under service name `com.inferport.c2go`). No plaintext tokens are left in configuration files or code repository commits!
 - 🎛️ **Interactive Setup Wizard**: Run `./c2go-client --setup` for a clean, classic terminal-based onboarding flow (`survey/v2`) to select zones, manage records, and configure update intervals.
 - 🌐 **Multi-Domain & Multi-Record Support**: Select multiple Cloudflare zones (domains) and specify exactly which `A` or `AAAA` records to keep updated.
 - ➕ **On-the-Fly DNS Record Creation**: Create new `A` or `AAAA` records directly within the setup wizard, dynamically applying your current public IP with custom Cloudflare proxy (`proxied`) settings.
