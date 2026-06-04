@@ -1,0 +1,24 @@
+[Unit]
+Description=c2go Dynamic DNS Client
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# OPCIÓN A: Ejecutar con la configuración de un usuario específico (Recomendado si hiciste el setup interactivo con tu usuario)
+# Reemplaza 'tu_usuario' por tu nombre de usuario en Ubuntu.
+User=tu_usuario
+ExecStart=/usr/local/bin/c2go
+
+# OPCIÓN B: Ejecutar como servicio global usando un archivo de configuración en /etc
+# Descomenta las líneas de abajo si deseas usar una ruta global de configuración y coméntalas si usas la Opción A.
+# User=nobody
+# ExecStart=/usr/local/bin/c2go -config /etc/c2go/config.json
+
+# Reiniciar automáticamente en caso de fallo
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

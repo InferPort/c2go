@@ -4,7 +4,7 @@
 *.dll
 *.so
 *.dylib
-c2go-client
+c2go
 
 # Test binary, built with `go test -c`
 *.test

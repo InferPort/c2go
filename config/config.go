@@ -27,7 +27,17 @@ type Config struct {
 	CloudflareToken string        `json:"-"`
 }
 
+var ConfigPathOverride string
+
 func GetConfigPath() (string, error) {
+	if ConfigPathOverride != "" {
+		// Ensure the directory for the custom config file exists
+		dir := filepath.Dir(ConfigPathOverride)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return "", err
+		}
+		return ConfigPathOverride, nil
+	}
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
@@ -40,6 +50,9 @@ func GetConfigPath() (string, error) {
 }
 
 func GetHistoryPath() (string, error) {
+	if ConfigPathOverride != "" {
+		return filepath.Join(filepath.Dir(ConfigPathOverride), "history.json"), nil
+	}
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
@@ -93,10 +106,35 @@ func Save(cfg *Config) error {
 
 	token := cfg.CloudflareToken
 
-	cfg.CloudflareToken = ""
-	defer func() { cfg.CloudflareToken = token }()
+	// Try keyring first
+	keyringErr := error(nil)
+	if token != "" {
+		keyringErr = keyring.Set(ServiceName, TokenKey, token)
+	}
 
-	data, err := json.MarshalIndent(cfg, "", "  ")
+	var data []byte
+	if keyringErr != nil {
+		// Keyring failed. Save token in plaintext in config.json as fallback.
+		type ConfigWithToken struct {
+			ManagedZones    []ManagedZone `json:"managed_zones"`
+			HistoryEnabled  bool          `json:"history_enabled"`
+			UpdateInterval  int           `json:"update_interval"`
+			CloudflareToken string        `json:"cloudflare_token"`
+		}
+		cfgWithToken := ConfigWithToken{
+			ManagedZones:    cfg.ManagedZones,
+			HistoryEnabled:  cfg.HistoryEnabled,
+			UpdateInterval:  cfg.UpdateInterval,
+			CloudflareToken: token,
+		}
+		data, err = json.MarshalIndent(cfgWithToken, "", "  ")
+	} else {
+		// Keyring succeeded. Keep token out of config.json.
+		cfg.CloudflareToken = ""
+		defer func() { cfg.CloudflareToken = token }()
+		data, err = json.MarshalIndent(cfg, "", "  ")
+	}
+
 	if err != nil {
 		return err
 	}
@@ -105,10 +143,8 @@ func Save(cfg *Config) error {
 		return err
 	}
 
-	if token != "" {
-		if err := keyring.Set(ServiceName, TokenKey, token); err != nil {
-			return fmt.Errorf("failed to save token to keyring: %w", err)
-		}
+	if keyringErr != nil {
+		fmt.Printf("\n\033[33m[ WARN ]\033[0m No se pudo guardar el token en el keyring del sistema (%v).\nSe guardó de forma segura y local en el archivo de configuración con permisos restringidos (0600).\n\n", keyringErr)
 	}
 
 	return nil

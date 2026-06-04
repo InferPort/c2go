@@ -28,7 +28,12 @@ const goBackOption = "[ < Volver a selección de dominios ]"
 
 func main() {
 	setupFlag := flag.Bool("setup", false, "Run the interactive setup configuration")
+	configFlag := flag.String("config", "", "Path to custom configuration file (e.g. /etc/c2go/config.json)")
 	flag.Parse()
+
+	if *configFlag != "" {
+		config.ConfigPathOverride = *configFlag
+	}
 
 	// 1. Setup Mode
 	if *setupFlag {
@@ -41,7 +46,8 @@ func main() {
 
 	// 2. Service Mode Integrity Checks
 	if !config.ConfigExists() {
-		console.LogInfo("No se encontró configuración. Por favor, ejecuta ./c2go-client --setup")
+		path, _ := config.GetConfigPath()
+		console.LogInfo("No se encontró configuración en: %s. Por favor, ejecuta `./c2go --setup`", path)
 		os.Exit(1)
 	}
 
@@ -52,7 +58,7 @@ func main() {
 	}
 
 	if cfg.CloudflareToken == "" {
-		console.LogInfo("Token no encontrado o inválido en el keyring. Por favor, ejecuta ./c2go-client --setup")
+		console.LogInfo("Token no encontrado o inválido en el keyring. Por favor, ejecuta ./c2go --setup")
 		os.Exit(1)
 	}
 
@@ -136,7 +142,7 @@ func promptConfirm(message string, defaultValue bool) (bool, error) {
 // promptMultiSelect shows numbered options and lets the user choose multiple values separated by commas.
 func promptMultiSelect(message string, options []string, defaultOptions []string) ([]string, error) {
 	fmt.Printf("\n%s%s%s\n", console.ColorCyan, message, console.ColorReset)
-	
+
 	defaultIndices := []int{}
 	for i, opt := range options {
 		isDefault := false

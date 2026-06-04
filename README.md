@@ -5,7 +5,7 @@
 ## Key Features
 
 - **OS Keyring Security**: Uses your operating system's native secure keyring (`go-keyring`) to store your Cloudflare API token. The token is never saved in plaintext on disk.
-- **Interactive Setup Wizard**: Run `./c2go-client --setup` for a terminal-based onboarding flow to select zones, manage records, and configure update intervals.
+- **Interactive Setup Wizard**: Run `./c2go --setup` for a terminal-based onboarding flow to select zones, manage records, and configure update intervals.
 - **Multi-Domain & Multi-Record Support**: Select multiple Cloudflare zones and specify exactly which A or AAAA records to keep updated.
 - **On-the-Fly DNS Record Creation**: Create new A or AAAA records directly within the setup wizard using your current public IP.
 - **Smart IP Checking with Fallbacks**: Retrieves your public IP via multiple services (`ipify.org`, `ifconfig.me`, `icanhazip.com`) for maximum availability.
@@ -41,7 +41,7 @@ c2go/
 ```bash
 git clone https://github.com/InferPort/c2go.git
 cd c2go
-go build -o c2go-client .
+go build -o c2go .
 ```
 
 ## Usage
@@ -51,7 +51,7 @@ go build -o c2go-client .
 Configure the application for the first time:
 
 ```bash
-./c2go-client --setup
+./c2go --setup
 ```
 
 The wizard guides you through:
@@ -66,7 +66,7 @@ The wizard guides you through:
 Run without flags to start the monitoring service:
 
 ```bash
-./c2go-client
+./c2go
 ```
 
 The service will periodically check your public IP and update Cloudflare records when a change is detected. Stop gracefully with Ctrl+C.
@@ -94,7 +94,48 @@ The JSON config file contains only non-sensitive settings:
 }
 ```
 
-The Cloudflare API token is stored securely in your OS keyring (service name: `com.inferport.c2go`).
+The Cloudflare API token is stored securely in your OS keyring (service name: `com.inferport.c2go`). If the OS keyring is unavailable, it will safely fallback to local storage inside `config.json` with restricted permissions (`0600`).
+
+### Custom Configuration Path
+
+You can specify a custom configuration file path using the `-config` flag:
+
+```bash
+./c2go -config /path/to/custom/config.json
+```
+
+## Systemd Service Installation (Ubuntu Server)
+
+To run `c2go` continuously in the background on Ubuntu Server, you can configure it as a `systemd` service:
+
+1. **Move Binary**: Copy the compiled binary to a system-wide path:
+   ```bash
+   sudo cp c2go /usr/local/bin/
+   sudo chmod +x /usr/local/bin/c2go
+   ```
+
+2. **Configure Service**: Copy the provided template service file:
+   ```bash
+   sudo cp c2go.service /etc/systemd/system/
+   ```
+
+3. **Edit Service Configuration**:
+   Open `/etc/systemd/system/c2go.service` and set your username in the `User=` directive (or configure option B to run globally with a custom config path):
+   ```bash
+   sudo nano /etc/systemd/system/c2go.service
+   ```
+
+4. **Enable and Start**:
+   Reload the systemd daemon, enable the service to start on boot, and run it:
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl enable c2go
+   sudo systemctl start c2go
+   ```
+
+5. **Manage Service**:
+   - Check status: `sudo systemctl status c2go`
+   - View logs: `journalctl -u c2go -f`
 
 ## License
 

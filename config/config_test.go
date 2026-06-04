@@ -118,3 +118,46 @@ func TestGetConfigPath_ReturnsJSON(t *testing.T) {
 		t.Errorf("expected config.json suffix, got %s", path)
 	}
 }
+
+func TestLoadFallbackFromPlaintext(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Set config directory env var
+	oldXDG := os.Getenv("XDG_CONFIG_HOME")
+	oldAppData := os.Getenv("AppData")
+	defer func() {
+		os.Setenv("XDG_CONFIG_HOME", oldXDG)
+		os.Setenv("AppData", oldAppData)
+	}()
+	os.Setenv("XDG_CONFIG_HOME", tmpDir)
+	os.Setenv("AppData", tmpDir)
+
+	// Create config.json manually with plaintext token
+	cfgPath, err := GetConfigPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rawConfig := `{
+		"managed_zones": [
+			{"domain": "test.com", "records": ["@"]}
+		],
+		"history_enabled": true,
+		"update_interval": 300,
+		"cloudflare_token": "fallback-token-123"
+	}`
+
+	if err := os.WriteFile(cfgPath, []byte(rawConfig), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Load config - this should fall back to plaintext token since keyring probably doesn't have it
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if cfg.CloudflareToken != "fallback-token-123" {
+		t.Errorf("expected CloudflareToken to be 'fallback-token-123', got '%s'", cfg.CloudflareToken)
+	}
+}
