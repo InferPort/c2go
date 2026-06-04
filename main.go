@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"flag"
@@ -18,7 +19,6 @@ import (
 	"c2go/history"
 	"c2go/ipcheck"
 
-	"github.com/AlecAivazis/survey/v2"
 	"github.com/zalando/go-keyring"
 	"golang.org/x/term"
 )
@@ -52,7 +52,7 @@ func main() {
 	}
 
 	if cfg.CloudflareToken == "" {
-		console.LogInfo("Token no encontrado o inválido en Keyring. Por favor, ejecuta ./c2go-client --setup")
+		console.LogInfo("Token no encontrado o inválido en el keyring. Por favor, ejecuta ./c2go-client --setup")
 		os.Exit(1)
 	}
 
@@ -89,20 +89,135 @@ func main() {
 	runWorker(ctx, cfg, provider, histManager)
 }
 
+// promptInput reads a single line of input with a default option.
+func promptInput(message string, defaultValue string) (string, error) {
+	reader := bufio.NewReader(os.Stdin)
+	if defaultValue != "" {
+		fmt.Printf("%s%s [%s]: %s", console.ColorCyan, message, defaultValue, console.ColorReset)
+	} else {
+		fmt.Printf("%s%s: %s", console.ColorCyan, message, console.ColorReset)
+	}
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return defaultValue, nil
+	}
+	return input, nil
+}
+
+// promptConfirm asks a yes/no question.
+func promptConfirm(message string, defaultValue bool) (bool, error) {
+	options := "y/N"
+	if defaultValue {
+		options = "Y/n"
+	}
+	for {
+		res, err := promptInput(fmt.Sprintf("%s (%s)", message, options), "")
+		if err != nil {
+			return false, err
+		}
+		res = strings.ToLower(strings.TrimSpace(res))
+		if res == "" {
+			return defaultValue, nil
+		}
+		if res == "y" || res == "yes" || res == "s" || res == "si" {
+			return true, nil
+		}
+		if res == "n" || res == "no" {
+			return false, nil
+		}
+		fmt.Println("Respuesta no válida. Por favor escribe Y o N.")
+	}
+}
+
+// promptMultiSelect shows numbered options and lets the user choose multiple values separated by commas.
+func promptMultiSelect(message string, options []string, defaultOptions []string) ([]string, error) {
+	fmt.Printf("\n%s%s%s\n", console.ColorCyan, message, console.ColorReset)
+	
+	defaultIndices := []int{}
+	for i, opt := range options {
+		isDefault := false
+		for _, d := range defaultOptions {
+			if d == opt {
+				isDefault = true
+				defaultIndices = append(defaultIndices, i+1)
+				break
+			}
+		}
+		marker := "[ ]"
+		if isDefault {
+			marker = "[X]"
+		}
+		fmt.Printf("  %s%2d)%s %s %s\n", console.ColorCyan, i+1, console.ColorReset, marker, opt)
+	}
+
+	var defaultStr string
+	if len(defaultIndices) > 0 {
+		var idxStrs []string
+		for _, idx := range defaultIndices {
+			idxStrs = append(idxStrs, strconv.Itoa(idx))
+		}
+		defaultStr = strings.Join(idxStrs, ",")
+		fmt.Printf("Selecciona los números separados por coma (ej: 1,3) [Default: %s]: ", defaultStr)
+	} else {
+		fmt.Print("Selecciona los números separados por coma (ej: 1,3): ")
+	}
+
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, err
+	}
+	input = strings.TrimSpace(input)
+	if input == "" {
+		input = defaultStr
+	}
+
+	if input == "" {
+		return nil, nil
+	}
+
+	var selected []string
+	parts := strings.Split(input, ",")
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		idx, err := strconv.Atoi(p)
+		if err != nil || idx < 1 || idx > len(options) {
+			fmt.Printf("%sNúmero de opción inválido ignorado: %s%s\n", console.ColorRed, p, console.ColorReset)
+			continue
+		}
+		selected = append(selected, options[idx-1])
+	}
+	return selected, nil
+}
+
 func runSetup() error {
 	console.PrintBanner("C2GO - CONFIGURACIÓN INICIAL")
 
 	var provider *dns.CloudflareProvider
 	var token string
 
-	existingToken, err := keyring.Get(config.ServiceName, config.TokenKey)
-	hasToken := (err == nil && existingToken != "")
+	var existingToken string
+	if storedToken, err := keyring.Get(config.ServiceName, config.TokenKey); err == nil && storedToken != "" {
+		existingToken = storedToken
+	} else if config.ConfigExists() {
+		if cfg, err := config.Load(); err == nil && cfg != nil {
+			existingToken = cfg.CloudflareToken
+		}
+	}
+	hasToken := existingToken != ""
 
 	// 1. DATOS DE ACCESO (Loop until valid token)
 	console.PrintSection("DATOS DE ACCESO")
 	for {
 		if hasToken {
-			console.LogInfo("Token de Cloudflare recuperado exitosamente desde el sistema.")
+			console.LogInfo("Token de Cloudflare recuperado exitosamente desde el keyring del sistema.")
 			console.PrintPrompt("Cloudflare API Token (Enter para mantener el actual)")
 		} else {
 			console.PrintPrompt("Cloudflare API Token")
@@ -136,7 +251,7 @@ func runSetup() error {
 		// Validate by listing zones
 		_, err = provider.ListZones(context.Background())
 		if err != nil {
-			console.LogError("Token inválido o sin permisos de lectura.")
+			console.LogError("Token inválido o sin permisos de lectura en Cloudflare.")
 			continue
 		}
 
@@ -169,14 +284,7 @@ func runSetup() error {
 
 DomainLoop:
 	for {
-		var selectedZones []string
-		promptZones := &survey.MultiSelect{
-			Message: "Selecciona los dominios a gestionar:",
-			Options: zones,
-			Default: defaultZones,
-		}
-
-		err = survey.AskOne(promptZones, &selectedZones, surveyIcons())
+		selectedZones, err := promptMultiSelect("Selecciona los dominios a gestionar:", zones, defaultZones)
 		if err != nil {
 			return err
 		}
@@ -207,14 +315,7 @@ DomainLoop:
 				}
 			}
 
-			var selectedRecords []string
-			promptRecords := &survey.MultiSelect{
-				Message: fmt.Sprintf("(%s) > Registros a monitorear (Espacio para seleccionar):", zoneName),
-				Options: records,
-				Default: defaultRecords,
-			}
-
-			err = survey.AskOne(promptRecords, &selectedRecords, surveyIcons())
+			selectedRecords, err := promptMultiSelect(fmt.Sprintf("(%s) > Registros a monitorear:", zoneName), records, defaultRecords)
 			if err != nil {
 				return err
 			}
@@ -238,20 +339,17 @@ DomainLoop:
 			}
 
 			if createNew {
-				var newHost string
-				promptNewHost := &survey.Input{
-					Message: "Nombre del host (ej. vpn o dev):",
+				newHost, err := promptInput("Nombre del host (ej. vpn o dev)", "")
+				if err != nil {
+					return err
 				}
-				survey.AskOne(promptNewHost, &newHost, surveyIcons())
 				newHost = strings.TrimSpace(newHost)
 
 				if newHost != "" {
-					var proxied bool
-					promptProxied := &survey.Confirm{
-						Message: "¿Activar proxy de Cloudflare (Proxied)?",
-						Default: false,
+					proxied, err := promptConfirm("¿Activar proxy de Cloudflare (Proxied)?", false)
+					if err != nil {
+						return err
 					}
-					survey.AskOne(promptProxied, &proxied, surveyIcons())
 
 					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 
@@ -296,43 +394,31 @@ DomainLoop:
 	// 3. PARÁMETROS
 	console.PrintSection("PARÁMETROS")
 
-	intervalPrompt := &survey.Input{
-		Message: "Intervalo de chequeo (segundos):",
-		Default: fmt.Sprintf("%d", cfg.UpdateInterval),
+	intervalStr, err := promptInput("Intervalo de chequeo (segundos)", fmt.Sprintf("%d", cfg.UpdateInterval))
+	if err != nil {
+		return err
 	}
-	var intervalStr string
-	survey.AskOne(intervalPrompt, &intervalStr, surveyIcons())
 	if intervalStr != "" {
 		if val, err := strconv.Atoi(intervalStr); err == nil && val >= 60 {
 			cfg.UpdateInterval = val
 		}
 	}
 
-	var historyEnabled bool
-	historyPrompt := &survey.Confirm{
-		Message: "¿Activar historial de IPs?",
-		Default: cfg.HistoryEnabled,
+	historyEnabled, err := promptConfirm("¿Activar historial de IPs?", cfg.HistoryEnabled)
+	if err != nil {
+		return err
 	}
-	survey.AskOne(historyPrompt, &historyEnabled, surveyIcons())
 	cfg.HistoryEnabled = historyEnabled
 
 	// 4. SISTEMA
 	console.PrintSection("SISTEMA")
 
-	fmt.Printf("> %sGuardando Token en Keyring... %s", console.ColorCyan, console.ColorReset)
-	// Only set the token if it's new (not empty string meaning keep current)
-	if token != "" {
-		if err := keyring.Set(config.ServiceName, config.TokenKey, token); err != nil {
-			console.Fail()
-			return fmt.Errorf("error saving token to keyring: %w", err)
-		}
-	}
-	console.OK()
+	cfg.CloudflareToken = token
 
-	fmt.Printf("> %sGuardando archivo de configuración... %s", console.ColorCyan, console.ColorReset)
+	fmt.Printf("> %sGuardando Token en Keyring... %s", console.ColorCyan, console.ColorReset)
 	if err := config.Save(cfg); err != nil {
 		console.Fail()
-		return fmt.Errorf("error guardando el archivo de configuración: %w", err)
+		return fmt.Errorf("error guardando la configuración: %w", err)
 	}
 	console.OK()
 
@@ -358,18 +444,6 @@ DomainLoop:
 	fmt.Println("==================================================")
 
 	return nil
-}
-
-func surveyIcons() survey.AskOpt {
-	return survey.WithIcons(func(icons *survey.IconSet) {
-		icons.SelectFocus.Text = ">"
-		icons.SelectFocus.Format = "cyan"
-		icons.MarkedOption.Text = "[X]"
-		icons.MarkedOption.Format = "green"
-		icons.UnmarkedOption.Text = "[ ]"
-		icons.Question.Text = ">"
-		icons.Question.Format = "cyan"
-	})
 }
 
 func runWorker(ctx context.Context, cfg *config.Config, provider dns.Provider, histManager *history.Manager) {

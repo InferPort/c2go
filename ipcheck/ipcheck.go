@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
 )
 
 var (
-	// ErrNoInternet is returned when all IP check services fail.
 	ErrNoInternet = errors.New("no internet connection or all IP services failed")
 )
 
@@ -20,14 +20,13 @@ var providers = []string{
 	"https://icanhazip.com",
 }
 
-// GetPublicIP tries to fetch the current public IP from multiple fallback providers.
-func GetPublicIP(ctx context.Context) (string, error) {
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-	}
+var httpClient = &http.Client{
+	Timeout: 5 * time.Second,
+}
 
+func GetPublicIP(ctx context.Context) (string, error) {
 	for _, url := range providers {
-		ip, err := fetchIP(ctx, client, url)
+		ip, err := fetchIP(ctx, url)
 		if err == nil && isValidIP(ip) {
 			return ip, nil
 		}
@@ -36,13 +35,13 @@ func GetPublicIP(ctx context.Context) (string, error) {
 	return "", ErrNoInternet
 }
 
-func fetchIP(ctx context.Context, client *http.Client, url string) (string, error) {
+func fetchIP(ctx context.Context, url string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
 	}
 
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -61,8 +60,5 @@ func fetchIP(ctx context.Context, client *http.Client, url string) (string, erro
 }
 
 func isValidIP(ip string) bool {
-	if ip == "" {
-		return false
-	}
-	return strings.Contains(ip, ".") || strings.Contains(ip, ":")
+	return net.ParseIP(ip) != nil
 }

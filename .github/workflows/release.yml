@@ -1,0 +1,126 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Binary
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            binary_name: c2go
+            archive_name: c2go-linux-amd64.tar.gz
+          - goos: linux
+            goarch: "386"
+            binary_name: c2go
+            archive_name: c2go-linux-386.tar.gz
+          - goos: linux
+            goarch: arm
+            binary_name: c2go
+            archive_name: c2go-linux-arm.tar.gz
+          - goos: linux
+            goarch: arm64
+            binary_name: c2go
+            archive_name: c2go-linux-arm64.tar.gz
+          - goos: windows
+            goarch: amd64
+            binary_name: c2go.exe
+            archive_name: c2go-windows-amd64.zip
+          - goos: windows
+            goarch: "386"
+            binary_name: c2go.exe
+            archive_name: c2go-windows-386.zip
+          - goos: windows
+            goarch: arm64
+            binary_name: c2go.exe
+            archive_name: c2go-windows-arm64.zip
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          go build -v -o build/${{ matrix.binary_name }} .
+
+      - name: Package binary
+        run: |
+          cd build
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            zip ../${{ matrix.archive_name }} ${{ matrix.binary_name }}
+          else
+            tar -czvf ../${{ matrix.archive_name }} ${{ matrix.binary_name }}
+          fi
+          cd ..
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.archive_name }}
+          path: ${{ matrix.archive_name }}
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate Release Notes
+        id: release_notes
+        run: |
+          # Fetch all tags
+          git fetch --tags --unshallow || git fetch --tags
+
+          # Find the previous tag
+          PREV_TAG=$(git tag --sort=-v:refname | head -n 1)
+
+          echo "### Commits in this release" > release_notes.md
+          echo "" >> release_notes.md
+
+          if [ -z "$PREV_TAG" ]; then
+            echo "No previous release tag found. Listing all commits."
+            git log --oneline | sed 's/^/- /' >> release_notes.md
+          else
+            echo "Listing commits between $PREV_TAG and HEAD"
+            git log --oneline ${PREV_TAG}..HEAD | sed 's/^/- /' >> release_notes.md
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.1.${{ github.run_number }}
+          name: Release v0.1.${{ github.run_number }}
+          body_path: release_notes.md
+          files: artifacts/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

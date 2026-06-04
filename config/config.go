@@ -1,12 +1,12 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/zalando/go-keyring"
-	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -16,20 +16,17 @@ const (
 )
 
 type ManagedZone struct {
-	Domain  string   `yaml:"domain"`
-	Records []string `yaml:"records"`
+	Domain  string   `json:"domain"`
+	Records []string `json:"records"`
 }
 
 type Config struct {
-	ManagedZones   []ManagedZone `yaml:"managed_zones"`
-	HistoryEnabled bool          `yaml:"history_enabled"`
-	UpdateInterval int           `yaml:"update_interval"` // in seconds
-
-	// Not exported to YAML
-	CloudflareToken string `yaml:"-"`
+	ManagedZones    []ManagedZone `json:"managed_zones"`
+	HistoryEnabled  bool          `json:"history_enabled"`
+	UpdateInterval  int           `json:"update_interval"`
+	CloudflareToken string        `json:"-"`
 }
 
-// GetConfigPath returns the path to the configuration file.
 func GetConfigPath() (string, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
@@ -39,10 +36,9 @@ func GetConfigPath() (string, error) {
 	if err := os.MkdirAll(appDir, 0755); err != nil {
 		return "", err
 	}
-	return filepath.Join(appDir, "config.yaml"), nil
+	return filepath.Join(appDir, "config.json"), nil
 }
 
-// GetHistoryPath returns the path to the history file.
 func GetHistoryPath() (string, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
@@ -51,7 +47,6 @@ func GetHistoryPath() (string, error) {
 	return filepath.Join(configDir, AppName, "history.json"), nil
 }
 
-// Load reads the config from disk and the token from the keyring.
 func Load() (*Config, error) {
 	path, err := GetConfigPath()
 	if err != nil {
@@ -64,18 +59,25 @@ func Load() (*Config, error) {
 	}
 
 	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
 
-	// Retrieve the token from the keyring
 	token, err := keyring.Get(ServiceName, TokenKey)
 	if err != nil {
+		if data, err := os.ReadFile(path); err == nil {
+			var legacy struct {
+				CloudflareToken string `json:"cloudflare_token"`
+			}
+			if json.Unmarshal(data, &legacy) == nil && legacy.CloudflareToken != "" {
+				cfg.CloudflareToken = legacy.CloudflareToken
+				return &cfg, nil
+			}
+		}
 		return nil, fmt.Errorf("failed to retrieve token from keyring: %w", err)
 	}
 	cfg.CloudflareToken = token
 
-	// Apply defaults
 	if cfg.UpdateInterval <= 0 {
 		cfg.UpdateInterval = 300
 	}
@@ -83,22 +85,35 @@ func Load() (*Config, error) {
 	return &cfg, nil
 }
 
-// Save writes the configuration to disk.
 func Save(cfg *Config) error {
 	path, err := GetConfigPath()
 	if err != nil {
 		return err
 	}
 
-	data, err := yaml.Marshal(cfg)
+	token := cfg.CloudflareToken
+
+	cfg.CloudflareToken = ""
+	defer func() { cfg.CloudflareToken = token }()
+
+	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
 	}
 
-	return os.WriteFile(path, data, 0644)
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		return err
+	}
+
+	if token != "" {
+		if err := keyring.Set(ServiceName, TokenKey, token); err != nil {
+			return fmt.Errorf("failed to save token to keyring: %w", err)
+		}
+	}
+
+	return nil
 }
 
-// ConfigExists checks if the configuration file already exists.
 func ConfigExists() bool {
 	path, err := GetConfigPath()
 	if err != nil {
