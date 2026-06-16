@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/zalando/go-keyring"
 )
@@ -24,10 +25,13 @@ type Config struct {
 	ManagedZones    []ManagedZone `json:"managed_zones"`
 	HistoryEnabled  bool          `json:"history_enabled"`
 	UpdateInterval  int           `json:"update_interval"`
+	UpdateCheck     *bool         `json:"update_check"`
+	AutoUpdate      *bool         `json:"auto_update"`
 	CloudflareToken string        `json:"-"`
 }
 
 var ConfigPathOverride string
+var configModTime time.Time
 
 func GetConfigPath() (string, error) {
 	if ConfigPathOverride != "" {
@@ -76,6 +80,10 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	if stat, err := os.Stat(path); err == nil {
+		configModTime = stat.ModTime()
+	}
+
 	token, err := keyring.Get(ServiceName, TokenKey)
 	if err != nil {
 		if data, err := os.ReadFile(path); err == nil {
@@ -95,7 +103,39 @@ func Load() (*Config, error) {
 		cfg.UpdateInterval = 300
 	}
 
+	if cfg.UpdateCheck == nil {
+		b := true
+		cfg.UpdateCheck = &b
+	}
+	if cfg.AutoUpdate == nil {
+		b := false
+		cfg.AutoUpdate = &b
+	}
+
 	return &cfg, nil
+}
+
+func ReloadIfChanged() (*Config, bool, error) {
+	path, err := GetConfigPath()
+	if err != nil {
+		return nil, false, err
+	}
+
+	stat, err := os.Stat(path)
+	if err != nil {
+		return nil, false, err
+	}
+
+	if !stat.ModTime().After(configModTime) {
+		return nil, false, nil
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		return nil, false, err
+	}
+
+	return cfg, true, nil
 }
 
 func Save(cfg *Config) error {
@@ -112,28 +152,26 @@ func Save(cfg *Config) error {
 		keyringErr = keyring.Set(ServiceName, TokenKey, token)
 	}
 
-	var data []byte
-	if keyringErr != nil {
-		// Keyring failed. Save token in plaintext in config.json as fallback.
-		type ConfigWithToken struct {
-			ManagedZones    []ManagedZone `json:"managed_zones"`
-			HistoryEnabled  bool          `json:"history_enabled"`
-			UpdateInterval  int           `json:"update_interval"`
-			CloudflareToken string        `json:"cloudflare_token"`
-		}
-		cfgWithToken := ConfigWithToken{
-			ManagedZones:    cfg.ManagedZones,
-			HistoryEnabled:  cfg.HistoryEnabled,
-			UpdateInterval:  cfg.UpdateInterval,
-			CloudflareToken: token,
-		}
-		data, err = json.MarshalIndent(cfgWithToken, "", "  ")
-	} else {
-		// Keyring succeeded. Keep token out of config.json.
-		cfg.CloudflareToken = ""
-		defer func() { cfg.CloudflareToken = token }()
-		data, err = json.MarshalIndent(cfg, "", "  ")
+	cfgForJSON := struct {
+		ManagedZones    []ManagedZone `json:"managed_zones"`
+		HistoryEnabled  bool          `json:"history_enabled"`
+		UpdateInterval  int           `json:"update_interval"`
+		CloudflareToken string        `json:"cloudflare_token,omitempty"`
+		UpdateCheck     *bool         `json:"update_check"`
+		AutoUpdate      *bool         `json:"auto_update"`
+	}{
+		ManagedZones:   cfg.ManagedZones,
+		HistoryEnabled: cfg.HistoryEnabled,
+		UpdateInterval: cfg.UpdateInterval,
+		UpdateCheck:    cfg.UpdateCheck,
+		AutoUpdate:     cfg.AutoUpdate,
 	}
+
+	if keyringErr != nil {
+		cfgForJSON.CloudflareToken = token
+	}
+
+	data, err := json.MarshalIndent(cfgForJSON, "", "  ")
 
 	if err != nil {
 		return err

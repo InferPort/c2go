@@ -2,8 +2,10 @@ package history
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -18,69 +20,128 @@ type Manager struct {
 	filePath string
 }
 
-// NewManager creates a new History manager that stores data at the given file path.
 func NewManager(filePath string) *Manager {
-	return &Manager{
-		filePath: filePath,
-	}
+	return &Manager{filePath: filePath}
 }
 
-// AddEntry records a new IP change event, keeping only the last maxHistoryEntries.
 func (m *Manager) AddEntry(ip string) error {
-	entries, err := m.GetEntries()
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-
-	newEntry := Entry{
+	entry := Entry{
 		Timestamp: time.Now(),
 		IP:        ip,
 	}
 
-	entries = append(entries, newEntry)
-
-	// Keep only the last maxHistoryEntries
-	if len(entries) > maxHistoryEntries {
-		entries = entries[len(entries)-maxHistoryEntries:]
+	line, err := json.Marshal(entry)
+	if err != nil {
+		return err
 	}
 
-	return m.saveEntries(entries)
+	dir := filepath.Dir(m.filePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
+	if err := m.migrateIfOldFormat(); err != nil {
+		return err
+	}
+
+	f, err := os.OpenFile(m.filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(f, string(line)); err != nil {
+		f.Close()
+		return err
+	}
+	f.Close()
+
+	return m.trimIfNeeded()
 }
 
-// GetEntries returns all recorded IP change events.
-func (m *Manager) GetEntries() ([]Entry, error) {
+func (m *Manager) migrateIfOldFormat() error {
 	data, err := os.ReadFile(m.filePath)
 	if err != nil {
+		return nil
+	}
+
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" || !strings.HasPrefix(trimmed, "[") {
+		return nil
+	}
+
+	var oldEntries []Entry
+	if err := json.Unmarshal([]byte(trimmed), &oldEntries); err != nil || len(oldEntries) == 0 {
+		return nil
+	}
+
+	lines := make([]string, len(oldEntries))
+	for i, e := range oldEntries {
+		b, _ := json.Marshal(e)
+		lines[i] = string(b)
+	}
+
+	return os.WriteFile(m.filePath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+}
+
+func (m *Manager) trimIfNeeded() error {
+	data, err := os.ReadFile(m.filePath)
+	if err != nil {
+		return err
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) <= maxHistoryEntries {
+		return nil
+	}
+
+	lines = lines[len(lines)-maxHistoryEntries:]
+	return os.WriteFile(m.filePath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+}
+
+func (m *Manager) readAllLines() ([]Entry, error) {
+	data, err := os.ReadFile(m.filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
 		return nil, err
+	}
+
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" {
+		return nil, nil
+	}
+
+	if strings.HasPrefix(trimmed, "[") {
+		var oldEntries []Entry
+		if err := json.Unmarshal([]byte(trimmed), &oldEntries); err == nil {
+			return oldEntries, nil
+		}
+		return nil, nil
 	}
 
 	var entries []Entry
-	if err := json.Unmarshal(data, &entries); err != nil {
-		return nil, err
+	for _, line := range strings.Split(trimmed, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var e Entry
+		if err := json.Unmarshal([]byte(line), &e); err == nil {
+			entries = append(entries, e)
+		}
 	}
 
 	return entries, nil
 }
 
-// GetLastIP returns the most recent IP recorded, or an empty string if none.
+func (m *Manager) GetEntries() ([]Entry, error) {
+	return m.readAllLines()
+}
+
 func (m *Manager) GetLastIP() string {
 	entries, err := m.GetEntries()
 	if err != nil || len(entries) == 0 {
 		return ""
 	}
 	return entries[len(entries)-1].IP
-}
-
-func (m *Manager) saveEntries(entries []Entry) error {
-	dir := filepath.Dir(m.filePath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
-	}
-
-	data, err := json.MarshalIndent(entries, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(m.filePath, data, 0644)
 }

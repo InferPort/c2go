@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"c2go/config"
@@ -23,9 +24,20 @@ var httpClient = &http.Client{
 
 var apiBaseURL = "https://api.cloudflare.com/client/v4"
 
-type CloudflareProvider struct {
-	token string
+type cachedRecord struct {
+	record    cfDNSRecord
+	expiresAt time.Time
 }
+
+type CloudflareProvider struct {
+	token         string
+	zoneIDCache   map[string]string
+	zoneIDCacheMu sync.RWMutex
+	recordCache   map[string]cachedRecord
+	recordCacheMu sync.RWMutex
+}
+
+const recordCacheTTL = 10 * time.Minute
 
 func NewCloudflareProvider(token string) (*CloudflareProvider, error) {
 	if token == "" {
@@ -33,7 +45,9 @@ func NewCloudflareProvider(token string) (*CloudflareProvider, error) {
 	}
 
 	return &CloudflareProvider{
-		token: token,
+		token:       token,
+		zoneIDCache: make(map[string]string),
+		recordCache: make(map[string]cachedRecord),
 	}, nil
 }
 
@@ -64,8 +78,8 @@ type cfDNSRecord struct {
 }
 
 type cfDNSRecordListResponse struct {
-	Success    bool           `json:"success"`
-	Result     []cfDNSRecord  `json:"result"`
+	Success    bool          `json:"success"`
+	Result     []cfDNSRecord `json:"result"`
 	ResultInfo struct {
 		Page       int `json:"page"`
 		PerPage    int `json:"per_page"`
@@ -196,6 +210,13 @@ func (p *CloudflareProvider) requestAllPages(ctx context.Context, method, path s
 }
 
 func (p *CloudflareProvider) zoneIDByName(ctx context.Context, name string) (string, error) {
+	p.zoneIDCacheMu.RLock()
+	id, ok := p.zoneIDCache[name]
+	p.zoneIDCacheMu.RUnlock()
+	if ok {
+		return id, nil
+	}
+
 	var resp cfZoneListResponse
 	err := p.request(ctx, "GET", "/zones", map[string]string{"name": name}, nil, &resp)
 	if err != nil {
@@ -206,7 +227,28 @@ func (p *CloudflareProvider) zoneIDByName(ctx context.Context, name string) (str
 		return "", fmt.Errorf("zona no encontrada para el dominio: %s", name)
 	}
 
-	return resp.Result[0].ID, nil
+	id = resp.Result[0].ID
+	p.zoneIDCacheMu.Lock()
+	p.zoneIDCache[name] = id
+	p.zoneIDCacheMu.Unlock()
+
+	return id, nil
+}
+
+func (p *CloudflareProvider) getCachedRecord(key string) (cachedRecord, bool) {
+	p.recordCacheMu.RLock()
+	defer p.recordCacheMu.RUnlock()
+	c, ok := p.recordCache[key]
+	return c, ok
+}
+
+func (p *CloudflareProvider) setCachedRecord(key string, record cfDNSRecord) {
+	p.recordCacheMu.Lock()
+	defer p.recordCacheMu.Unlock()
+	p.recordCache[key] = cachedRecord{
+		record:    record,
+		expiresAt: time.Now().Add(recordCacheTTL),
+	}
 }
 
 func (p *CloudflareProvider) ListZones(ctx context.Context) ([]string, error) {
@@ -345,6 +387,14 @@ func (p *CloudflareProvider) UpdateDomains(ctx context.Context, ip string, manag
 						fullRecordName = fmt.Sprintf("%s.%s", recordName, mz.Domain)
 					}
 
+					cacheKey := fmt.Sprintf("%s|%s|%s", zoneID, fullRecordName, recordType)
+					if cached, ok := p.getCachedRecord(cacheKey); ok && time.Now().Before(cached.expiresAt) {
+						if cached.record.Content == ip {
+							console.LogInfo("Registro %s ya está actualizado (%s). [cache]", fullRecordName, ip)
+							return nil
+						}
+					}
+
 					var listResp cfDNSRecordListResponse
 					err = p.request(ctx, "GET", fmt.Sprintf("/zones/%s/dns_records", zoneID), map[string]string{
 						"name": fullRecordName,
@@ -361,6 +411,7 @@ func (p *CloudflareProvider) UpdateDomains(ctx context.Context, ip string, manag
 					}
 
 					record := listResp.Result[0]
+					p.setCachedRecord(cacheKey, record)
 
 					if record.Content == ip {
 						console.LogInfo("Registro %s ya está actualizado (%s).", fullRecordName, ip)

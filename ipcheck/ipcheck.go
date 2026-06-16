@@ -26,10 +26,35 @@ var httpClient = &http.Client{
 }
 
 func GetPublicIP(ctx context.Context) (string, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	type result struct {
+		ip  string
+		err error
+	}
+	results := make(chan result, len(providers))
+
 	for _, url := range providers {
-		ip, err := fetchIP(ctx, url)
-		if err == nil && isValidIP(ip) {
-			return ip, nil
+		url := url
+		go func() {
+			ip, err := fetchIP(ctx, url)
+			select {
+			case results <- result{ip, err}:
+			case <-ctx.Done():
+			}
+		}()
+	}
+
+	for range providers {
+		select {
+		case res := <-results:
+			if res.err == nil && isValidIP(res.ip) {
+				cancel()
+				return res.ip, nil
+			}
+		case <-ctx.Done():
+			return "", ErrNoInternet
 		}
 	}
 

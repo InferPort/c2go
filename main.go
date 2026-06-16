@@ -18,6 +18,7 @@ import (
 	"c2go/dns"
 	"c2go/history"
 	"c2go/ipcheck"
+	"c2go/update"
 
 	"github.com/zalando/go-keyring"
 	"golang.org/x/term"
@@ -29,13 +30,22 @@ const goBackOption = "[ < Volver a selección de dominios ]"
 func main() {
 	setupFlag := flag.Bool("setup", false, "Run the interactive setup configuration")
 	configFlag := flag.String("config", "", "Path to custom configuration file (e.g. /etc/c2go/config.json)")
+	updateFlag := flag.Bool("update", false, "Check for and install the latest version")
 	flag.Parse()
 
 	if *configFlag != "" {
 		config.ConfigPathOverride = *configFlag
 	}
 
-	// 1. Setup Mode
+	update.CleanupOldBinary()
+
+	// 1. Update Mode
+	if *updateFlag {
+		runUpdate()
+		os.Exit(0)
+	}
+
+	// 2. Setup Mode
 	if *setupFlag {
 		if err := runSetup(); err != nil {
 			console.LogError("Setup failed: %v", err)
@@ -44,7 +54,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	// 2. Service Mode Integrity Checks
+	// 3. Service Mode Integrity Checks
 	if !config.ConfigExists() {
 		path, _ := config.GetConfigPath()
 		console.LogInfo("No se encontró configuración en: %s. Por favor, ejecuta `./c2go --setup`", path)
@@ -90,6 +100,9 @@ func main() {
 		console.LogInfo("Deteniendo servicio c2go...")
 		cancel()
 	}()
+
+	// Start background update checker
+	startUpdateChecker(ctx, cfg)
 
 	// Start the worker loop
 	runWorker(ctx, cfg, provider, histManager)
@@ -476,6 +489,12 @@ func runWorker(ctx context.Context, cfg *config.Config, provider dns.Provider, h
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			if newCfg, changed, err := config.ReloadIfChanged(); err == nil && changed {
+				console.LogInfo("Configuración recargada desde archivo.")
+				cfg = newCfg
+				ticker.Reset(time.Duration(cfg.UpdateInterval) * time.Second)
+			}
+
 			newIP, err := performUpdate(ctx, cfg, provider, histManager, lastIP)
 			if err != nil {
 				if !errors.Is(err, context.Canceled) {
@@ -519,4 +538,113 @@ func performUpdate(ctx context.Context, cfg *config.Config, provider dns.Provide
 	}
 
 	return ip, nil
+}
+
+func runUpdate() {
+	ctx := context.Background()
+
+	console.LogInfo("Buscando actualizaciones...")
+	result, err := update.CheckForUpdate(ctx)
+	if err != nil {
+		console.LogError("Error al buscar actualizaciones: %v", err)
+		os.Exit(1)
+	}
+
+	if !result.HasUpdate {
+		console.LogInfo("Ya tienes la versión más reciente (%s).", update.Version)
+		return
+	}
+
+	fmt.Printf("\nNueva versión disponible: %s → %s\n", result.CurrentVersion, result.LatestVersion)
+	if result.ReleaseNotes != "" {
+		fmt.Printf("Notas de la versión:\n%s\n", result.ReleaseNotes)
+	}
+
+	confirmed, err := promptConfirm("¿Descargar e instalar la actualización?", true)
+	if err != nil || !confirmed {
+		console.LogInfo("Actualización cancelada.")
+		return
+	}
+
+	tmpDir, err := os.MkdirTemp("", "c2go-update")
+	if err != nil {
+		console.LogError("Error al crear directorio temporal: %v", err)
+		os.Exit(1)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	console.LogInfo("Descargando %s...", result.AssetName)
+	binPath, err := result.DownloadAndVerify(ctx, tmpDir)
+	if err != nil {
+		console.LogError("Error al descargar actualización: %v", err)
+		os.Exit(1)
+	}
+
+	console.LogInfo("Instalando actualización...")
+	if err := update.ApplyUpdate(binPath); err != nil {
+		console.LogError("Error al instalar actualización: %v", err)
+		os.Exit(1)
+	}
+
+	console.LogSuccess("Actualizado a %s. Reinicia c2go para usar la nueva versión.", result.LatestVersion)
+}
+
+func startUpdateChecker(ctx context.Context, cfg *config.Config) {
+	if cfg.UpdateCheck == nil || !*cfg.UpdateCheck {
+		return
+	}
+
+	go func() {
+		ticker := time.NewTicker(2 * time.Minute)
+		defer ticker.Stop()
+
+		checkAndHandleUpdate(ctx, cfg)
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				checkAndHandleUpdate(ctx, cfg)
+			}
+		}
+	}()
+}
+
+func checkAndHandleUpdate(ctx context.Context, cfg *config.Config) {
+	result, err := update.CheckForUpdate(ctx)
+	if err != nil {
+		return
+	}
+
+	if !result.HasUpdate {
+		return
+	}
+
+	if cfg.AutoUpdate != nil && *cfg.AutoUpdate {
+		console.LogInfo("Nueva versión %s detectada. Descargando...", result.LatestVersion)
+
+		tmpDir, err := os.MkdirTemp("", "c2go-update")
+		if err != nil {
+			console.LogError("Error al crear directorio temporal: %v", err)
+			return
+		}
+		defer os.RemoveAll(tmpDir)
+
+		binPath, err := result.DownloadAndVerify(ctx, tmpDir)
+		if err != nil {
+			console.LogError("Error al descargar actualización: %v", err)
+			return
+		}
+
+		console.LogInfo("Instalando actualización...")
+		if err := update.ApplyUpdate(binPath); err != nil {
+			console.LogError("Error al instalar actualización: %v", err)
+			return
+		}
+
+		console.LogSuccess("Actualizado a %s. Reinicia c2go para aplicar los cambios.", result.LatestVersion)
+	} else {
+		console.LogInfo("Nueva versión %s disponible. Ejecuta 'c2go --update' para actualizar.", result.LatestVersion)
+	}
 }

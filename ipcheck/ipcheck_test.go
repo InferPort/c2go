@@ -52,25 +52,21 @@ func TestGetPublicIP_Success(t *testing.T) {
 	}
 }
 
-func TestGetPublicIP_FallbackOrder(t *testing.T) {
-	callCount := 0
+func TestGetPublicIP_ConcurrentFallback(t *testing.T) {
 	srv1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		callCount++
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer srv1.Close()
 
 	srv2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		callCount++
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("198.51.100.1"))
 	}))
 	defer srv2.Close()
 
 	srv3 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		callCount++
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("should not reach"))
+		w.Write([]byte("should not matter"))
 	}))
 	defer srv3.Close()
 
@@ -84,9 +80,6 @@ func TestGetPublicIP_FallbackOrder(t *testing.T) {
 	}
 	if ip != "198.51.100.1" {
 		t.Errorf("expected 198.51.100.1, got %s", ip)
-	}
-	if callCount != 2 {
-		t.Errorf("expected 2 calls (fail then success), got %d", callCount)
 	}
 }
 
@@ -163,4 +156,3 @@ func TestGetPublicIP_TraceFormat(t *testing.T) {
 		t.Errorf("expected 192.0.2.1, got %s", ip)
 	}
 }
-

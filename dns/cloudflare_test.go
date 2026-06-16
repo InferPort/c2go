@@ -23,7 +23,11 @@ func newTestProvider(t *testing.T, handler http.HandlerFunc) (*httptest.Server, 
 		httpClient = origClient
 	})
 
-	return srv, &CloudflareProvider{token: "test-token"}
+	p, err := NewCloudflareProvider("test-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return srv, p
 }
 
 func TestNewCloudflareProvider_EmptyToken(t *testing.T) {
