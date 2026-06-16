@@ -143,3 +143,24 @@ func TestGetPublicIP_ContextCancellation(t *testing.T) {
 		t.Error("expected error due to context cancellation")
 	}
 }
+
+func TestGetPublicIP_TraceFormat(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("fl=123\nh=cloudflare.com\nip=192.0.2.1\nts=123456\n"))
+	}))
+	defer srv.Close()
+
+	originalProviders := providers
+	providers = []string{srv.URL + "/cdn-cgi/trace"}
+	defer func() { providers = originalProviders }()
+
+	ip, err := GetPublicIP(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ip != "192.0.2.1" {
+		t.Errorf("expected 192.0.2.1, got %s", ip)
+	}
+}
+

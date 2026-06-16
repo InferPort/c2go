@@ -15,6 +15,7 @@ var (
 )
 
 var providers = []string{
+	"https://1.1.1.1/cdn-cgi/trace",
 	"https://api.ipify.org",
 	"https://ifconfig.me/ip",
 	"https://icanhazip.com",
@@ -56,7 +57,18 @@ func fetchIP(ctx context.Context, url string) (string, error) {
 		return "", err
 	}
 
-	return strings.TrimSpace(string(bodyBytes)), nil
+	bodyStr := string(bodyBytes)
+	if strings.Contains(url, "cdn-cgi/trace") {
+		lines := strings.Split(bodyStr, "\n")
+		for _, line := range lines {
+			if strings.HasPrefix(line, "ip=") {
+				return strings.TrimSpace(strings.TrimPrefix(line, "ip=")), nil
+			}
+		}
+		return "", errors.New("ip key not found in trace response")
+	}
+
+	return strings.TrimSpace(bodyStr), nil
 }
 
 func isValidIP(ip string) bool {
