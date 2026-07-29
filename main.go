@@ -74,8 +74,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Recomendar correr como servicio si no está ejecutándose como uno y es una terminal interactiva
-	if !isRunningAsService() && term.IsTerminal(int(os.Stdin.Fd())) {
+	// Recomendar correr como servicio si no está ejecutándose como uno
+	if !isRunningAsService() {
 		console.LogInfo("💡 Consejo: c2go no se está ejecutando como servicio.")
 		console.LogInfo("   Para que corra en segundo plano y se inicie automáticamente con el sistema,")
 		console.LogInfo("   puedes instalarlo como servicio de systemd ejecutando: sudo ./c2go --install-service")
