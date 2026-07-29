@@ -768,6 +768,12 @@ func installSystemdService() error {
 	if _, err := io.Copy(destFile, srcFile); err != nil {
 		return fmt.Errorf("%s: %w", i18n.T("failed_copy_bin"), err)
 	}
+	destFile.Close() // Cerrar explícitamente antes de cambiar permisos
+
+	// Forzar permisos de ejecución (chmod +x)
+	if err := os.Chmod(targetBinPath, 0755); err != nil {
+		return fmt.Errorf("failed to set execution permissions on %s: %w", targetBinPath, err)
+	}
 
 	// 3. Determinar el usuario real que invocó sudo
 	user := os.Getenv("SUDO_USER")
