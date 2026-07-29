@@ -20,6 +20,7 @@ import (
 	"c2go/console"
 	"c2go/dns"
 	"c2go/history"
+	"c2go/i18n"
 	"c2go/ipcheck"
 	"c2go/update"
 
@@ -27,8 +28,8 @@ import (
 	"golang.org/x/term"
 )
 
-const createNewOption = "[+] Crear nuevo registro A"
-const goBackOption = "[ < Volver a selección de dominios ]"
+var createNewOption = "[+] Create new A record"
+var goBackOption = "[ < Go back to domain selection ]"
 
 func main() {
 	setupFlag := flag.Bool("setup", false, "Run the interactive setup configuration")
@@ -41,6 +42,17 @@ func main() {
 		config.ConfigPathOverride = *configFlag
 	}
 
+	// Initialize localization
+	lang := ""
+	if config.ConfigExists() {
+		if cfg, err := config.Load(); err == nil && cfg != nil {
+			lang = cfg.Language
+		}
+	}
+	i18n.Init(lang)
+	createNewOption = i18n.T("create_new_record_option")
+	goBackOption = i18n.T("go_back_option")
+
 	update.CleanupOldBinary()
 
 	// 1. Update Mode
@@ -52,7 +64,7 @@ func main() {
 	// 2. Setup Mode
 	if *setupFlag {
 		if err := runSetup(); err != nil {
-			console.LogError("Setup failed: %v", err)
+			console.LogError(i18n.T("setup_failed", err))
 			os.Exit(1)
 		}
 		os.Exit(0)
@@ -61,7 +73,7 @@ func main() {
 	// 2.5. Service Installation Mode
 	if *installServiceFlag {
 		if err := installSystemdService(); err != nil {
-			console.LogError("Failed to install service: %v", err)
+			console.LogError(err.Error())
 			os.Exit(1)
 		}
 		os.Exit(0)
@@ -70,39 +82,39 @@ func main() {
 	// 3. Service Mode Integrity Checks
 	if !config.ConfigExists() {
 		path, _ := config.GetConfigPath()
-		console.LogInfo("No se encontró configuración en: %s. Por favor, ejecuta `./c2go --setup`", path)
+		console.LogInfo(i18n.T("config_not_found", path))
 		os.Exit(1)
 	}
 
 	// Recomendar correr como servicio si no está ejecutándose como uno
 	if !isRunningAsService() {
-		console.LogInfo("💡 Consejo: c2go no se está ejecutando como servicio.")
-		console.LogInfo("   Para que corra en segundo plano y se inicie automáticamente con el sistema,")
-		console.LogInfo("   puedes instalarlo como servicio de systemd ejecutando: sudo ./c2go --install-service")
+		console.LogInfo(i18n.T("not_running_service"))
+		console.LogInfo(i18n.T("run_as_service_recommendation"))
+		console.LogInfo(i18n.T("run_as_service_command"))
 	}
 
 	cfg, err := config.Load()
 	if err != nil {
-		console.LogError("Configuration error: %v. Run with --setup to reconfigure.", err)
+		console.LogError(i18n.T("config_error", err))
 		os.Exit(1)
 	}
 
 	if cfg.CloudflareToken == "" {
-		console.LogInfo("Token no encontrado o inválido en el keyring. Por favor, ejecuta ./c2go --setup")
+		console.LogInfo(i18n.T("token_not_found"))
 		os.Exit(1)
 	}
 
-	console.LogInfo("Iniciando servicio c2go...")
+	console.LogInfo(i18n.T("starting_service"))
 
 	provider, err := dns.NewCloudflareProvider(cfg.CloudflareToken)
 	if err != nil {
-		console.LogError("Failed to initialize DNS provider: %v", err)
+		console.LogError(i18n.T("failed_init_dns", err))
 		os.Exit(1)
 	}
 
 	histPath, err := config.GetHistoryPath()
 	if err != nil {
-		console.LogError("Failed to determine history path: %v", err)
+		console.LogError(i18n.T("failed_history_path", err))
 		os.Exit(1)
 	}
 	histManager := history.NewManager(histPath)
@@ -117,7 +129,7 @@ func main() {
 
 	go func() {
 		<-sigs
-		console.LogInfo("Deteniendo servicio c2go...")
+		console.LogInfo(i18n.T("stopping_service"))
 		cancel()
 	}()
 
@@ -168,7 +180,7 @@ func promptConfirm(message string, defaultValue bool) (bool, error) {
 		if res == "n" || res == "no" {
 			return false, nil
 		}
-		fmt.Println("Respuesta no válida. Por favor escribe Y o N.")
+		fmt.Println(i18n.T("invalid_response"))
 	}
 }
 
@@ -200,9 +212,9 @@ func promptMultiSelect(message string, options []string, defaultOptions []string
 			idxStrs = append(idxStrs, strconv.Itoa(idx))
 		}
 		defaultStr = strings.Join(idxStrs, ",")
-		fmt.Printf("Selecciona los números separados por coma (ej: 1,3) [Default: %s]: ", defaultStr)
+		fmt.Printf(i18n.T("select_numbers_default", defaultStr))
 	} else {
-		fmt.Print("Selecciona los números separados por coma (ej: 1,3): ")
+		fmt.Printf(i18n.T("select_numbers"))
 	}
 
 	reader := bufio.NewReader(os.Stdin)
@@ -228,7 +240,7 @@ func promptMultiSelect(message string, options []string, defaultOptions []string
 		}
 		idx, err := strconv.Atoi(p)
 		if err != nil || idx < 1 || idx > len(options) {
-			fmt.Printf("%sNúmero de opción inválido ignorado: %s%s\n", console.ColorRed, p, console.ColorReset)
+			fmt.Printf("%s%s%s\n", console.ColorRed, i18n.T("input_invalid_option", p), console.ColorReset)
 			continue
 		}
 		selected = append(selected, options[idx-1])
@@ -237,7 +249,22 @@ func promptMultiSelect(message string, options []string, defaultOptions []string
 }
 
 func runSetup() error {
-	console.PrintBanner("C2GO - CONFIGURACIÓN INICIAL")
+	// 0. SELECCIONAR IDIOMA / SELECT LANGUAGE
+	console.PrintSection("SELECT LANGUAGE / SELECCIONAR IDIOMA")
+	fmt.Println("Language / Idioma:\n  1) English\n  2) Español")
+	langOption, err := promptInput("Select option / Seleccione opción", "1")
+	if err != nil {
+		return err
+	}
+	selectedLang := "en"
+	if langOption == "2" {
+		selectedLang = "es"
+	}
+	i18n.Init(selectedLang)
+	createNewOption = i18n.T("create_new_record_option")
+	goBackOption = i18n.T("go_back_option")
+
+	console.PrintBanner(i18n.T("setup_title"))
 
 	var provider *dns.CloudflareProvider
 	var token string
@@ -253,13 +280,13 @@ func runSetup() error {
 	hasToken := existingToken != ""
 
 	// 1. DATOS DE ACCESO (Loop until valid token)
-	console.PrintSection("DATOS DE ACCESO")
+	console.PrintSection(i18n.T("access_data"))
 	for {
 		if hasToken {
-			console.LogInfo("Token de Cloudflare recuperado exitosamente desde el keyring del sistema.")
-			console.PrintPrompt("Cloudflare API Token (Enter para mantener el actual)")
+			console.LogInfo(i18n.T("token_keyring_success"))
+			console.PrintPrompt(i18n.T("cf_token_prompt_keep"))
 		} else {
-			console.PrintPrompt("Cloudflare API Token")
+			console.PrintPrompt(i18n.T("cf_token_prompt"))
 		}
 
 		bytePassword, err := term.ReadPassword(int(os.Stdin.Fd()))
@@ -277,20 +304,20 @@ func runSetup() error {
 
 		if token == "" {
 			console.Fail()
-			fmt.Println("El API Token es requerido.")
+			fmt.Println(i18n.T("token_required"))
 			continue
 		}
 
 		provider, err = dns.NewCloudflareProvider(token)
 		if err != nil {
-			console.LogError("Token inválido o error de inicialización: %v", err)
+			console.LogError(i18n.T("failed_init_dns", err))
 			continue
 		}
 
 		// Validate by listing zones
 		_, err = provider.ListZones(context.Background())
 		if err != nil {
-			console.LogError("Token inválido o sin permisos de lectura en Cloudflare.")
+			console.LogError(i18n.T("token_not_found"))
 			continue
 		}
 
@@ -305,15 +332,16 @@ func runSetup() error {
 			UpdateInterval: 300,
 		}
 	}
+	cfg.Language = selectedLang
 
 	// 2. DOMINIOS Y REGISTROS
-	console.PrintSection("DOMINIOS Y REGISTROS")
+	console.PrintSection(i18n.T("domains_records"))
 	zones, err := provider.ListZones(context.Background())
 	if err != nil {
-		return fmt.Errorf("error listing zones: %w", err)
+		return fmt.Errorf(i18n.T("error_list_zones") + ": %w", err)
 	}
 	if len(zones) == 0 {
-		return fmt.Errorf("no se encontraron dominios en tu cuenta de Cloudflare")
+		return fmt.Errorf(i18n.T("no_zones_found"))
 	}
 
 	var defaultZones []string
@@ -323,24 +351,24 @@ func runSetup() error {
 
 DomainLoop:
 	for {
-		selectedZones, err := promptMultiSelect("Selecciona los dominios a gestionar:", zones, defaultZones)
+		selectedZones, err := promptMultiSelect(i18n.T("select_domains"), zones, defaultZones)
 		if err != nil {
 			return err
 		}
 
 		if len(selectedZones) == 0 {
-			console.LogError("Debes seleccionar al menos un dominio.")
+			console.LogError(i18n.T("must_select_domain"))
 			continue
 		}
 
 		var pendingZones []config.ManagedZone
 
 		for i, zoneName := range selectedZones {
-			fmt.Printf("\nConfigurando registros para: %s [%d/%d]\n", zoneName, i+1, len(selectedZones))
+			fmt.Printf("\n"+i18n.T("configuring_records", zoneName, i+1, len(selectedZones))+"\n")
 
 			records, err := provider.ListARecords(context.Background(), zoneName)
 			if err != nil {
-				return fmt.Errorf("error listing records for %s: %w", zoneName, err)
+				return fmt.Errorf(i18n.T("error_list_records", zoneName) + ": %w", err)
 			}
 
 			// Add creation option and go back option at the end
@@ -354,13 +382,13 @@ DomainLoop:
 				}
 			}
 
-			selectedRecords, err := promptMultiSelect(fmt.Sprintf("(%s) > Registros a monitorear:", zoneName), records, defaultRecords)
+			selectedRecords, err := promptMultiSelect(i18n.T("records_monitor", zoneName), records, defaultRecords)
 			if err != nil {
 				return err
 			}
 
 			if len(selectedRecords) == 0 {
-				console.LogError("Debes seleccionar al menos un registro.")
+				console.LogError(i18n.T("must_select_record"))
 				continue DomainLoop
 			}
 
@@ -378,40 +406,40 @@ DomainLoop:
 			}
 
 			if createNew {
-				newHost, err := promptInput("Nombre del host (ej. vpn o dev)", "")
+				newHost, err := promptInput(i18n.T("host_name_prompt"), "")
 				if err != nil {
 					return err
 				}
 				newHost = strings.TrimSpace(newHost)
 
 				if newHost != "" {
-					proxied, err := promptConfirm("¿Activar proxy de Cloudflare (Proxied)?", false)
+					proxied, err := promptConfirm(i18n.T("cf_proxy_prompt"), false)
 					if err != nil {
 						return err
 					}
 
 					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 
-					console.LogInfo("Detectando IP pública actual para crear el registro...")
+					console.LogInfo(i18n.T("detecting_public_ip"))
 					ip, err := ipcheck.GetPublicIP(ctx)
 					if err != nil {
 						cancel()
-						return fmt.Errorf("no se pudo detectar IP pública: %w", err)
+						return fmt.Errorf(i18n.T("failed_public_ip") + ": %w", err)
 					}
 
 					err = provider.CreateARecord(ctx, zoneName, newHost, ip, proxied)
 					if err != nil {
 						if strings.Contains(err.Error(), "tipo incompatible") {
-							console.LogError("El registro ya existe con un tipo incompatible.")
+							console.LogError(i18n.T("record_exists_incompatible"))
 						} else {
-							console.LogError("Fallo al crear el registro: %v", err)
+							console.LogError(i18n.T("failed_create_record", err))
 						}
 					} else {
 						fullRecordName := zoneName
 						if newHost != "@" && newHost != zoneName {
 							fullRecordName = fmt.Sprintf("%s.%s", newHost, zoneName)
 						}
-						console.LogSuccess("Registro '%s' creado exitosamente.", fullRecordName)
+						console.LogSuccess(i18n.T("record_created_success", fullRecordName))
 						finalRecords = append(finalRecords, newHost)
 					}
 					cancel()
@@ -419,7 +447,7 @@ DomainLoop:
 			}
 
 			if len(finalRecords) == 0 {
-				console.LogError("No se seleccionó ni creó ningún registro válido para %s.", zoneName)
+				console.LogError(i18n.T("no_valid_record_selected", zoneName))
 				continue DomainLoop
 			}
 
@@ -431,9 +459,9 @@ DomainLoop:
 	}
 
 	// 3. PARÁMETROS
-	console.PrintSection("PARÁMETROS")
+	console.PrintSection(i18n.T("parameters"))
 
-	intervalStr, err := promptInput("Intervalo de chequeo (segundos)", fmt.Sprintf("%d", cfg.UpdateInterval))
+	intervalStr, err := promptInput(i18n.T("check_interval"), fmt.Sprintf("%d", cfg.UpdateInterval))
 	if err != nil {
 		return err
 	}
@@ -443,7 +471,7 @@ DomainLoop:
 		}
 	}
 
-	historyEnabled, err := promptConfirm("¿Activar historial de IPs?", cfg.HistoryEnabled)
+	historyEnabled, err := promptConfirm(i18n.T("enable_history"), cfg.HistoryEnabled)
 	if err != nil {
 		return err
 	}
@@ -453,7 +481,7 @@ DomainLoop:
 	if cfg.UpdateCheck != nil {
 		defaultUpdateCheck = *cfg.UpdateCheck
 	}
-	updateCheck, err := promptConfirm("¿Activar búsqueda automática de actualizaciones?", defaultUpdateCheck)
+	updateCheck, err := promptConfirm(i18n.T("check_updates_prompt"), defaultUpdateCheck)
 	if err != nil {
 		return err
 	}
@@ -463,54 +491,54 @@ DomainLoop:
 	if cfg.AutoUpdate != nil {
 		defaultAutoUpdate = *cfg.AutoUpdate
 	}
-	autoUpdate, err := promptConfirm("¿Activar instalación automática de actualizaciones (Auto-Update)?", defaultAutoUpdate)
+	autoUpdate, err := promptConfirm(i18n.T("auto_update_prompt"), defaultAutoUpdate)
 	if err != nil {
 		return err
 	}
 	cfg.AutoUpdate = &autoUpdate
 
 	// 4. SISTEMA
-	console.PrintSection("SISTEMA")
+	console.PrintSection(i18n.T("system"))
 
 	cfg.CloudflareToken = token
 
-	fmt.Printf("> %sGuardando Token en Keyring... %s", console.ColorCyan, console.ColorReset)
+	fmt.Printf("> %s%s %s", console.ColorCyan, i18n.T("saving_token"), console.ColorReset)
 	if err := config.Save(cfg); err != nil {
 		console.Fail()
-		return fmt.Errorf("error guardando la configuración: %w", err)
+		return fmt.Errorf(i18n.T("error_saving_config") + ": %w", err)
 	}
 	console.OK()
 
 	configPath, _ := config.GetConfigPath()
-	fmt.Printf("[ OK ] Configuración guardada en: %s\n", configPath)
+	fmt.Printf(i18n.T("config_saved", configPath)+"\n")
 
 	var totalRecords int
 	for _, mz := range cfg.ManagedZones {
 		totalRecords += len(mz.Records)
 	}
 
-	histStr := "Desactivado"
+	histStr := i18n.T("history_disabled")
 	if cfg.HistoryEnabled {
-		histStr = "Activado"
+		histStr = i18n.T("history_enabled")
 	}
 
-	updateCheckStr := "Desactivado"
+	updateCheckStr := i18n.T("history_disabled")
 	if cfg.UpdateCheck != nil && *cfg.UpdateCheck {
-		updateCheckStr = "Activado"
+		updateCheckStr = i18n.T("history_enabled")
 	}
 
-	autoUpdateStr := "Desactivado"
+	autoUpdateStr := i18n.T("history_disabled")
 	if cfg.AutoUpdate != nil && *cfg.AutoUpdate {
-		autoUpdateStr = "Activado"
+		autoUpdateStr = i18n.T("history_enabled")
 	}
 
-	fmt.Println("\n[ RESUMEN ]")
-	fmt.Printf("> Dominios gestionados: %d\n", len(cfg.ManagedZones))
-	fmt.Printf("> Total de registros: %d\n", totalRecords)
-	fmt.Printf("> Intervalo: %ds\n", cfg.UpdateInterval)
-	fmt.Printf("> Historial: %s\n", histStr)
-	fmt.Printf("> Buscar actualizaciones: %s\n", updateCheckStr)
-	fmt.Printf("> Auto-actualizar: %s\n", autoUpdateStr)
+	fmt.Println("\n[ " + i18n.T("summary") + " ]")
+	fmt.Printf("> "+i18n.T("managed_domains", len(cfg.ManagedZones))+"\n")
+	fmt.Printf("> "+i18n.T("total_records", totalRecords)+"\n")
+	fmt.Printf("> "+i18n.T("interval", cfg.UpdateInterval)+"\n")
+	fmt.Printf("> "+i18n.T("history", histStr)+"\n")
+	fmt.Printf("> "+i18n.T("search_updates_summary", updateCheckStr)+"\n")
+	fmt.Printf("> "+i18n.T("auto_update_summary", autoUpdateStr)+"\n")
 
 	fmt.Println("==================================================")
 
@@ -523,14 +551,14 @@ func runWorker(ctx context.Context, cfg *config.Config, provider dns.Provider, h
 	if cfg.HistoryEnabled {
 		lastIP = histManager.GetLastIP()
 		if lastIP != "" {
-			console.LogInfo("Cargada última IP conocida desde el historial: %s", lastIP)
+			console.LogInfo(i18n.T("loaded_last_ip", lastIP))
 		}
 	}
 
 	// Execute immediately on startup
 	lastIP, err := performUpdate(ctx, cfg, provider, histManager, lastIP)
 	if err != nil && !errors.Is(err, context.Canceled) {
-		console.LogError("Error durante el chequeo inicial: %v", err)
+		console.LogError(i18n.T("initial_check_error", err))
 	}
 
 	ticker := time.NewTicker(time.Duration(cfg.UpdateInterval) * time.Second)
@@ -542,7 +570,7 @@ func runWorker(ctx context.Context, cfg *config.Config, provider dns.Provider, h
 			return
 		case <-ticker.C:
 			if newCfg, changed, err := config.ReloadIfChanged(); err == nil && changed {
-				console.LogInfo("Configuración recargada desde archivo.")
+				console.LogInfo(i18n.T("config_reloaded"))
 				cfg = newCfg
 				ticker.Reset(time.Duration(cfg.UpdateInterval) * time.Second)
 			}
@@ -550,7 +578,7 @@ func runWorker(ctx context.Context, cfg *config.Config, provider dns.Provider, h
 			newIP, err := performUpdate(ctx, cfg, provider, histManager, lastIP)
 			if err != nil {
 				if !errors.Is(err, context.Canceled) {
-					console.LogError("Error en el ciclo de actualización: %v", err)
+					console.LogError(i18n.T("update_cycle_error", err))
 				}
 			} else {
 				lastIP = newIP
@@ -563,29 +591,29 @@ func performUpdate(ctx context.Context, cfg *config.Config, provider dns.Provide
 	ip, err := ipcheck.GetPublicIP(ctx)
 	if err != nil {
 		if errors.Is(err, ipcheck.ErrNoInternet) {
-			console.LogWait("Sin conexión a internet. Esperando al próximo ciclo.")
+			console.LogWait(i18n.T("no_internet_waiting"))
 			return lastIP, nil
 		}
 		return lastIP, err
 	}
 
 	if ip == lastIP {
-		console.LogInfo("La IP no ha cambiado (%s). Omitiendo actualización DNS.", ip)
+		console.LogInfo(i18n.T("ip_not_changed", ip))
 		return lastIP, nil
 	}
 
-	console.LogInfo("Cambio de IP detectado: %s -> %s", lastIP, ip)
+	console.LogInfo(i18n.T("ip_change_detected", lastIP, ip))
 
 	err = provider.UpdateDomains(ctx, ip, cfg.ManagedZones)
 	if err != nil {
 		return lastIP, err
 	}
 
-	console.LogSuccess("Operaciones DNS completadas.")
+	console.LogSuccess(i18n.T("dns_ops_completed"))
 
 	if cfg.HistoryEnabled {
 		if err := histManager.AddEntry(ip); err != nil {
-			console.LogError("Fallo al guardar IP en historial: %v", err)
+			console.LogError(i18n.T("history_save_failed", err))
 		}
 	}
 
@@ -595,50 +623,50 @@ func performUpdate(ctx context.Context, cfg *config.Config, provider dns.Provide
 func runUpdate() {
 	ctx := context.Background()
 
-	console.LogInfo("Buscando actualizaciones...")
+	console.LogInfo(i18n.T("checking_updates"))
 	result, err := update.CheckForUpdate(ctx)
 	if err != nil {
-		console.LogError("Error al buscar actualizaciones: %v", err)
+		console.LogError(i18n.T("update_check_error", err))
 		os.Exit(1)
 	}
 
 	if !result.HasUpdate {
-		console.LogInfo("Ya tienes la versión más reciente (%s).", update.Version)
+		console.LogInfo(i18n.T("latest_version_already", update.Version))
 		return
 	}
 
-	fmt.Printf("\nNueva versión disponible: %s → %s\n", result.CurrentVersion, result.LatestVersion)
+	fmt.Printf("\n"+i18n.T("new_version_available", result.CurrentVersion, result.LatestVersion)+"\n")
 	if result.ReleaseNotes != "" {
-		fmt.Printf("Notas de la versión:\n%s\n", result.ReleaseNotes)
+		fmt.Printf(i18n.T("release_notes")+"\n%s\n", result.ReleaseNotes)
 	}
 
-	confirmed, err := promptConfirm("¿Descargar e instalar la actualización?", true)
+	confirmed, err := promptConfirm(i18n.T("download_install_prompt"), true)
 	if err != nil || !confirmed {
-		console.LogInfo("Actualización cancelada.")
+		console.LogInfo(i18n.T("update_cancelled"))
 		return
 	}
 
 	tmpDir, err := os.MkdirTemp("", "c2go-update")
 	if err != nil {
-		console.LogError("Error al crear directorio temporal: %v", err)
+		console.LogError(i18n.T("tmp_dir_error", err))
 		os.Exit(1)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	console.LogInfo("Descargando %s...", result.AssetName)
+	console.LogInfo(i18n.T("downloading_asset", result.AssetName))
 	binPath, err := result.DownloadAndVerify(ctx, tmpDir)
 	if err != nil {
-		console.LogError("Error al descargar actualización: %v", err)
+		console.LogError(i18n.T("download_error", err))
 		os.Exit(1)
 	}
 
-	console.LogInfo("Instalando actualización...")
+	console.LogInfo(i18n.T("installing_update"))
 	if err := update.ApplyUpdate(binPath); err != nil {
-		console.LogError("Error al instalar actualización: %v", err)
+		console.LogError(i18n.T("install_error", err))
 		os.Exit(1)
 	}
 
-	console.LogSuccess("Actualizado a %s. Reinicia c2go para usar la nueva versión.", result.LatestVersion)
+	console.LogSuccess(i18n.T("updated_success", result.LatestVersion))
 }
 
 func startUpdateChecker(ctx context.Context, cfg *config.Config) {
@@ -674,30 +702,30 @@ func checkAndHandleUpdate(ctx context.Context, cfg *config.Config) {
 	}
 
 	if cfg.AutoUpdate != nil && *cfg.AutoUpdate {
-		console.LogInfo("Nueva versión %s detectada. Descargando...", result.LatestVersion)
+		console.LogInfo(i18n.T("new_version_detected", result.LatestVersion))
 
 		tmpDir, err := os.MkdirTemp("", "c2go-update")
 		if err != nil {
-			console.LogError("Error al crear directorio temporal: %v", err)
+			console.LogError(i18n.T("tmp_dir_error", err))
 			return
 		}
 		defer os.RemoveAll(tmpDir)
 
 		binPath, err := result.DownloadAndVerify(ctx, tmpDir)
 		if err != nil {
-			console.LogError("Error al descargar actualización: %v", err)
+			console.LogError(i18n.T("download_error", err))
 			return
 		}
 
-		console.LogInfo("Instalando actualización...")
+		console.LogInfo(i18n.T("installing_update"))
 		if err := update.ApplyUpdate(binPath); err != nil {
-			console.LogError("Error al instalar actualización: %v", err)
+			console.LogError(i18n.T("install_error", err))
 			return
 		}
 
-		console.LogSuccess("Actualizado a %s. Reinicia c2go para aplicar los cambios.", result.LatestVersion)
+		console.LogSuccess(i18n.T("updated_success_restart", result.LatestVersion))
 	} else {
-		console.LogInfo("Nueva versión %s disponible. Ejecuta 'c2go --update' para actualizar.", result.LatestVersion)
+		console.LogInfo(i18n.T("new_version_available_manual", result.LatestVersion))
 	}
 }
 
@@ -707,38 +735,38 @@ func isRunningAsService() bool {
 
 func installSystemdService() error {
 	if runtime.GOOS != "linux" {
-		return errors.New("la instalación automática de servicio actualmente solo está soportada en GNU/Linux (systemd)")
+		return errors.New(i18n.T("install_service_linux_only"))
 	}
 
 	// Validar que se corre como root
 	if os.Getuid() != 0 {
-		return errors.New("se requieren permisos de administrador (ej. sudo ./c2go --install-service)")
+		return errors.New(i18n.T("install_service_root_req"))
 	}
 
 	// 1. Obtener ruta del binario actual
 	execPath, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("no se pudo determinar la ruta del ejecutable actual: %w", err)
+		return fmt.Errorf(i18n.T("failed_determine_exec") + ": %w", err)
 	}
 
 	targetBinPath := "/usr/local/bin/c2go"
-	console.LogInfo("Copiando ejecutable a %s...", targetBinPath)
+	console.LogInfo(i18n.T("copying_exec", targetBinPath))
 
 	// 2. Copiar binario a /usr/local/bin/c2go
 	srcFile, err := os.Open(execPath)
 	if err != nil {
-		return fmt.Errorf("error al abrir binario original: %w", err)
+		return fmt.Errorf(i18n.T("failed_open_src") + ": %w", err)
 	}
 	defer srcFile.Close()
 
 	destFile, err := os.OpenFile(targetBinPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
 	if err != nil {
-		return fmt.Errorf("error al crear el binario en destino: %w", err)
+		return fmt.Errorf(i18n.T("failed_create_dest") + ": %w", err)
 	}
 	defer destFile.Close()
 
 	if _, err := io.Copy(destFile, srcFile); err != nil {
-		return fmt.Errorf("error al copiar el archivo binario: %w", err)
+		return fmt.Errorf(i18n.T("failed_copy_bin") + ": %w", err)
 	}
 
 	// 3. Determinar el usuario real que invocó sudo
@@ -747,7 +775,7 @@ func installSystemdService() error {
 		user = "root" // Fallback si fue ejecutado directamente por root sin sudo
 	}
 
-	console.LogInfo("Configurando el servicio para ejecutarse bajo el usuario: %s", user)
+	console.LogInfo(i18n.T("configuring_service_user", user))
 
 	// 4. Crear archivo de servicio en /etc/systemd/system/c2go.service
 	serviceContent := fmt.Sprintf(`[Unit]
@@ -767,28 +795,28 @@ WantedBy=multi-user.target
 `, user, targetBinPath)
 
 	servicePath := "/etc/systemd/system/c2go.service"
-	console.LogInfo("Creando archivo de servicio en %s...", servicePath)
+	console.LogInfo(i18n.T("creating_service_file", servicePath))
 	if err := os.WriteFile(servicePath, []byte(serviceContent), 0644); err != nil {
-		return fmt.Errorf("error al crear el archivo del servicio systemd: %w", err)
+		return fmt.Errorf(i18n.T("failed_create_service") + ": %w", err)
 	}
 
 	// 5. Recargar daemon, habilitar e iniciar el servicio
-	console.LogInfo("Recargando daemon de systemd...")
+	console.LogInfo(i18n.T("reloading_systemd"))
 	if err := exec.Command("systemctl", "daemon-reload").Run(); err != nil {
-		return fmt.Errorf("error al ejecutar systemctl daemon-reload: %w", err)
+		return fmt.Errorf(i18n.T("failed_daemon_reload") + ": %w", err)
 	}
 
-	console.LogInfo("Habilitando servicio c2go...")
+	console.LogInfo(i18n.T("enabling_service"))
 	if err := exec.Command("systemctl", "enable", "c2go").Run(); err != nil {
-		return fmt.Errorf("error al habilitar el servicio: %w", err)
+		return fmt.Errorf(i18n.T("failed_enable_service") + ": %w", err)
 	}
 
-	console.LogInfo("Iniciando servicio c2go...")
+	console.LogInfo(i18n.T("starting_c2go_service"))
 	if err := exec.Command("systemctl", "start", "c2go").Run(); err != nil {
-		return fmt.Errorf("error al iniciar el servicio: %w", err)
+		return fmt.Errorf(i18n.T("failed_start_service") + ": %w", err)
 	}
 
-	console.LogSuccess("¡Servicio c2go instalado, habilitado e iniciado con éxito!")
+	console.LogSuccess(i18n.T("service_installed_success"))
 	return nil
 }
 

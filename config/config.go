@@ -27,6 +27,7 @@ type Config struct {
 	UpdateInterval  int           `json:"update_interval"`
 	UpdateCheck     *bool         `json:"update_check"`
 	AutoUpdate      *bool         `json:"auto_update"`
+	Language        string        `json:"language"`
 	CloudflareToken string        `json:"-"`
 }
 
@@ -159,12 +160,14 @@ func Save(cfg *Config) error {
 		CloudflareToken string        `json:"cloudflare_token,omitempty"`
 		UpdateCheck     *bool         `json:"update_check"`
 		AutoUpdate      *bool         `json:"auto_update"`
+		Language        string        `json:"language"`
 	}{
 		ManagedZones:   cfg.ManagedZones,
 		HistoryEnabled: cfg.HistoryEnabled,
 		UpdateInterval: cfg.UpdateInterval,
 		UpdateCheck:    cfg.UpdateCheck,
 		AutoUpdate:     cfg.AutoUpdate,
+		Language:       cfg.Language,
 	}
 
 	if keyringErr != nil {
