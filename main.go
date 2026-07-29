@@ -6,8 +6,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"os/signal"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -31,6 +34,7 @@ func main() {
 	setupFlag := flag.Bool("setup", false, "Run the interactive setup configuration")
 	configFlag := flag.String("config", "", "Path to custom configuration file (e.g. /etc/c2go/config.json)")
 	updateFlag := flag.Bool("update", false, "Check for and install the latest version")
+	installServiceFlag := flag.Bool("install-service", false, "Install c2go as a systemd service (Linux only)")
 	flag.Parse()
 
 	if *configFlag != "" {
@@ -54,11 +58,27 @@ func main() {
 		os.Exit(0)
 	}
 
+	// 2.5. Service Installation Mode
+	if *installServiceFlag {
+		if err := installSystemdService(); err != nil {
+			console.LogError("Failed to install service: %v", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
 	// 3. Service Mode Integrity Checks
 	if !config.ConfigExists() {
 		path, _ := config.GetConfigPath()
 		console.LogInfo("No se encontró configuración en: %s. Por favor, ejecuta `./c2go --setup`", path)
 		os.Exit(1)
+	}
+
+	// Recomendar correr como servicio si no está ejecutándose como uno y es una terminal interactiva
+	if !isRunningAsService() && term.IsTerminal(int(os.Stdin.Fd())) {
+		console.LogInfo("💡 Consejo: c2go no se está ejecutando como servicio.")
+		console.LogInfo("   Para que corra en segundo plano y se inicie automáticamente con el sistema,")
+		console.LogInfo("   puedes instalarlo como servicio de systemd ejecutando: sudo ./c2go --install-service")
 	}
 
 	cfg, err := config.Load()
@@ -429,6 +449,26 @@ DomainLoop:
 	}
 	cfg.HistoryEnabled = historyEnabled
 
+	defaultUpdateCheck := true
+	if cfg.UpdateCheck != nil {
+		defaultUpdateCheck = *cfg.UpdateCheck
+	}
+	updateCheck, err := promptConfirm("¿Activar búsqueda automática de actualizaciones?", defaultUpdateCheck)
+	if err != nil {
+		return err
+	}
+	cfg.UpdateCheck = &updateCheck
+
+	defaultAutoUpdate := false
+	if cfg.AutoUpdate != nil {
+		defaultAutoUpdate = *cfg.AutoUpdate
+	}
+	autoUpdate, err := promptConfirm("¿Activar instalación automática de actualizaciones (Auto-Update)?", defaultAutoUpdate)
+	if err != nil {
+		return err
+	}
+	cfg.AutoUpdate = &autoUpdate
+
 	// 4. SISTEMA
 	console.PrintSection("SISTEMA")
 
@@ -454,11 +494,23 @@ DomainLoop:
 		histStr = "Activado"
 	}
 
+	updateCheckStr := "Desactivado"
+	if cfg.UpdateCheck != nil && *cfg.UpdateCheck {
+		updateCheckStr = "Activado"
+	}
+
+	autoUpdateStr := "Desactivado"
+	if cfg.AutoUpdate != nil && *cfg.AutoUpdate {
+		autoUpdateStr = "Activado"
+	}
+
 	fmt.Println("\n[ RESUMEN ]")
 	fmt.Printf("> Dominios gestionados: %d\n", len(cfg.ManagedZones))
 	fmt.Printf("> Total de registros: %d\n", totalRecords)
 	fmt.Printf("> Intervalo: %ds\n", cfg.UpdateInterval)
 	fmt.Printf("> Historial: %s\n", histStr)
+	fmt.Printf("> Buscar actualizaciones: %s\n", updateCheckStr)
+	fmt.Printf("> Auto-actualizar: %s\n", autoUpdateStr)
 
 	fmt.Println("==================================================")
 
@@ -648,3 +700,95 @@ func checkAndHandleUpdate(ctx context.Context, cfg *config.Config) {
 		console.LogInfo("Nueva versión %s disponible. Ejecuta 'c2go --update' para actualizar.", result.LatestVersion)
 	}
 }
+
+func isRunningAsService() bool {
+	return os.Getenv("INVOCATION_ID") != ""
+}
+
+func installSystemdService() error {
+	if runtime.GOOS != "linux" {
+		return errors.New("la instalación automática de servicio actualmente solo está soportada en GNU/Linux (systemd)")
+	}
+
+	// Validar que se corre como root
+	if os.Getuid() != 0 {
+		return errors.New("se requieren permisos de administrador (ej. sudo ./c2go --install-service)")
+	}
+
+	// 1. Obtener ruta del binario actual
+	execPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("no se pudo determinar la ruta del ejecutable actual: %w", err)
+	}
+
+	targetBinPath := "/usr/local/bin/c2go"
+	console.LogInfo("Copiando ejecutable a %s...", targetBinPath)
+
+	// 2. Copiar binario a /usr/local/bin/c2go
+	srcFile, err := os.Open(execPath)
+	if err != nil {
+		return fmt.Errorf("error al abrir binario original: %w", err)
+	}
+	defer srcFile.Close()
+
+	destFile, err := os.OpenFile(targetBinPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
+	if err != nil {
+		return fmt.Errorf("error al crear el binario en destino: %w", err)
+	}
+	defer destFile.Close()
+
+	if _, err := io.Copy(destFile, srcFile); err != nil {
+		return fmt.Errorf("error al copiar el archivo binario: %w", err)
+	}
+
+	// 3. Determinar el usuario real que invocó sudo
+	user := os.Getenv("SUDO_USER")
+	if user == "" {
+		user = "root" // Fallback si fue ejecutado directamente por root sin sudo
+	}
+
+	console.LogInfo("Configurando el servicio para ejecutarse bajo el usuario: %s", user)
+
+	// 4. Crear archivo de servicio en /etc/systemd/system/c2go.service
+	serviceContent := fmt.Sprintf(`[Unit]
+Description=c2go Dynamic DNS Client
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%s
+ExecStart=%s
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+`, user, targetBinPath)
+
+	servicePath := "/etc/systemd/system/c2go.service"
+	console.LogInfo("Creando archivo de servicio en %s...", servicePath)
+	if err := os.WriteFile(servicePath, []byte(serviceContent), 0644); err != nil {
+		return fmt.Errorf("error al crear el archivo del servicio systemd: %w", err)
+	}
+
+	// 5. Recargar daemon, habilitar e iniciar el servicio
+	console.LogInfo("Recargando daemon de systemd...")
+	if err := exec.Command("systemctl", "daemon-reload").Run(); err != nil {
+		return fmt.Errorf("error al ejecutar systemctl daemon-reload: %w", err)
+	}
+
+	console.LogInfo("Habilitando servicio c2go...")
+	if err := exec.Command("systemctl", "enable", "c2go").Run(); err != nil {
+		return fmt.Errorf("error al habilitar el servicio: %w", err)
+	}
+
+	console.LogInfo("Iniciando servicio c2go...")
+	if err := exec.Command("systemctl", "start", "c2go").Run(); err != nil {
+		return fmt.Errorf("error al iniciar el servicio: %w", err)
+	}
+
+	console.LogSuccess("¡Servicio c2go instalado, habilitado e iniciado con éxito!")
+	return nil
+}
+
