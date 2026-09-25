@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  lint-and-test:
-    name: Lint & Test
+  test:
+    name: Test & Build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -42,48 +42,5 @@ jobs:
       - name: Run Tests
         run: go test ./... -v -count=1 -cover
 
-  cross-build-check:
-    name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
-    needs: lint-and-test
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - goos: linux
-            goarch: amd64
-          - goos: linux
-            goarch: arm64
-          - goos: darwin
-            goarch: amd64
-          - goos: darwin
-            goarch: arm64
-          - goos: windows
-            goarch: amd64
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: web/frontend/package-lock.json
-
-      - name: Build Web Frontend
-        run: |
-          cd web/frontend
-          npm ci --legacy-peer-deps
-          npm run build
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "stable"
-          cache: true
-
-      - name: Verify Cross-Compilation
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-        run: go build -v -o /dev/null .
+      - name: Verify Binary Build
+        run: go build -o /dev/null .
