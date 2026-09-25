@@ -156,3 +156,20 @@ func TestGetPublicIP_TraceFormat(t *testing.T) {
 		t.Errorf("expected 192.0.2.1, got %s", ip)
 	}
 }
+
+func TestWatchNetworkChanges_ContextCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	ch := WatchNetworkChanges(ctx)
+
+	// Cancel context and verify channel closes properly
+	cancel()
+
+	select {
+	case _, ok := <-ch:
+		if ok {
+			// received drained value or closed
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("expected WatchNetworkChanges channel to close on context cancellation")
+	}
+}

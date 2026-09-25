@@ -564,10 +564,28 @@ func runWorker(ctx context.Context, cfg *config.Config, provider dns.Provider, h
 	ticker := time.NewTicker(time.Duration(cfg.UpdateInterval) * time.Second)
 	defer ticker.Stop()
 
+	netWatcher := ipcheck.WatchNetworkChanges(ctx)
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-netWatcher:
+			console.LogInfo("%s", i18n.T("network_change_detected"))
+			if newCfg, changed, err := config.ReloadIfChanged(); err == nil && changed {
+				console.LogInfo("%s", i18n.T("config_reloaded"))
+				cfg = newCfg
+			}
+			ticker.Reset(time.Duration(cfg.UpdateInterval) * time.Second)
+
+			newIP, err := performUpdate(ctx, cfg, provider, histManager, lastIP)
+			if err != nil {
+				if !errors.Is(err, context.Canceled) {
+					console.LogError("%s", i18n.T("update_cycle_error", err))
+				}
+			} else {
+				lastIP = newIP
+			}
 		case <-ticker.C:
 			if newCfg, changed, err := config.ReloadIfChanged(); err == nil && changed {
 				console.LogInfo("%s", i18n.T("config_reloaded"))
