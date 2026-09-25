@@ -46,7 +46,23 @@ export const translations = {
     enabled: "Enabled",
     disabled: "Disabled",
     proxied: "Proxied",
-    dns_only: "DNS Only"
+    dns_only: "DNS Only",
+    // Dashboard strings
+    dashboard_title: "Settings & Configuration",
+    tab_nics: "Network Interfaces",
+    tab_nics_desc: "Multi-NIC priority & routing",
+    tab_records: "Domains & Records",
+    tab_records_desc: "Managed zones and DNS entries",
+    tab_automation: "Automation & Sync",
+    tab_automation_desc: "Intervals, history & updates",
+    tab_auth: "Cloudflare Auth",
+    tab_auth_desc: "API credentials & token",
+    tab_service: "Service & Status",
+    tab_service_desc: "Daemon status and commands",
+    save_changes: "Save Changes",
+    changes_saved: "Changes saved successfully!",
+    run_wizard_again: "Run Setup Wizard Again",
+    active_config_badge: "Active Config"
   },
   es: {
     title: "Configuración Inicial",
@@ -95,6 +111,22 @@ export const translations = {
     enabled: "Activado",
     disabled: "Desactivado",
     proxied: "Proxied",
-    dns_only: "Solo DNS"
+    dns_only: "Solo DNS",
+    // Dashboard strings
+    dashboard_title: "Panel de Ajustes",
+    tab_nics: "Interfaces de Red",
+    tab_nics_desc: "Prioridad Multi-NIC y enrutamiento",
+    tab_records: "Dominios y Registros",
+    tab_records_desc: "Zonas administradas y DNS",
+    tab_automation: "Automatización",
+    tab_automation_desc: "Intervalos, historial y updates",
+    tab_auth: "Acceso Cloudflare",
+    tab_auth_desc: "Credenciales y token de API",
+    tab_service: "Servicio y Estado",
+    tab_service_desc: "Estado del daemon y comandos",
+    save_changes: "Guardar Cambios",
+    changes_saved: "¡Cambios guardados con éxito!",
+    run_wizard_again: "Ejecutar Asistente Inicial de Nuevo",
+    active_config_badge: "Configuración Activa"
   }
 };

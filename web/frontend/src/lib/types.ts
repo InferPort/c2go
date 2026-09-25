@@ -10,6 +10,11 @@ export interface DNSRecord {
   proxied: boolean;
 }
 
+export interface HistoryEntry {
+  timestamp: string;
+  ip: string;
+}
+
 export interface ManagedRecord {
   id: string;
   name: string;

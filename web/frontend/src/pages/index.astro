@@ -2,17 +2,20 @@
 import Layout from '../layouts/Layout.astro';
 ---
 
-<Layout title="c2go | Dynamic DNS Setup Wizard">
-  <!-- Top Application Bar -->
-  <header class="border-b border-zinc-800/80 bg-zinc-950/80 backdrop-blur-xl sticky top-0 z-50">
-    <div class="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+<Layout title="c2go | Dynamic DNS Control Center">
+  <!-- Top Navigation Bar -->
+  <header class="border-b border-zinc-800/80 bg-zinc-950/90 backdrop-blur-xl sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
       <div class="flex items-center gap-3">
         <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-rose-500 to-rose-700 flex items-center justify-center text-white shadow-sm shadow-rose-950/40">
           <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
         </div>
         <div class="flex items-center gap-2">
           <span class="font-bold text-sm text-zinc-100 tracking-tight">c2go</span>
-          <span class="px-1.5 py-0.5 rounded bg-zinc-850 text-[10px] font-mono text-zinc-400 border border-zinc-750">Setup</span>
+          <span id="header-mode-badge" class="px-2 py-0.5 rounded bg-zinc-850 text-[10px] font-mono text-zinc-400 border border-zinc-750 flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-zinc-500" id="header-badge-dot"></span>
+            <span id="header-badge-text">Initializing...</span>
+          </span>
         </div>
       </div>
 
@@ -21,7 +24,7 @@ import Layout from '../layouts/Layout.astro';
         <div class="flex items-center gap-2 px-2.5 py-1 bg-zinc-900 border border-zinc-800 rounded-lg text-xs font-mono">
           <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
           <span class="text-zinc-400" id="top-ip-lbl">IP:</span>
-          <span class="text-zinc-200 font-semibold" id="top-ip-val">Detecting...</span>
+          <span class="text-zinc-200 font-semibold" id="top-ip-val">...</span>
         </div>
 
         <!-- Language Switcher -->
@@ -33,18 +36,283 @@ import Layout from '../layouts/Layout.astro';
     </div>
   </header>
 
-  <!-- Main 2-Column App Grid -->
-  <main class="max-w-6xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-start">
+  <!-- Initial Smooth Loading Skeleton (Prevents any UI Flash) -->
+  <div id="view-loader" class="max-w-7xl mx-auto w-full px-4 sm:px-6 py-12 flex flex-col items-center justify-center min-h-[400px] space-y-4">
+    <div class="w-8 h-8 rounded-full border-2 border-rose-500/20 border-t-rose-500 animate-spin"></div>
+    <div class="text-xs font-mono text-zinc-400 animate-pulse">Loading system configuration...</div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- VIEW 1: PRODUCTION DASHBOARD (Shown when is_configured == true) -->
+  <!-- ========================================================================= -->
+  <main id="view-dashboard" class="max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8 space-y-6 hidden">
+    
+    <!-- Top KPI Metrics Grid -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <!-- Card 1: Live Public IP -->
+      <div class="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-4.5 backdrop-blur-md relative overflow-hidden group">
+        <div class="absolute -right-6 -bottom-6 w-24 h-24 bg-rose-500/5 rounded-full blur-xl pointer-events-none"></div>
+        <div class="flex items-center justify-between text-xs text-zinc-400 mb-2">
+          <span class="font-medium">Active Public IP</span>
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        </div>
+        <div class="flex items-baseline justify-between">
+          <div class="font-mono text-lg sm:text-xl font-bold text-zinc-100 tracking-tight" id="kpi-public-ip">...</div>
+          <button type="button" id="btn-copy-kpi-ip" class="text-zinc-400 hover:text-zinc-200 text-xs p-1 rounded bg-zinc-800/80 border border-zinc-700/80 cursor-pointer" title="Copy IP">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+          </button>
+        </div>
+        <div class="text-[11px] text-zinc-400 mt-2 flex items-center gap-1.5 font-mono">
+          <span>NIC Binding:</span>
+          <span class="text-rose-400 font-semibold" id="kpi-primary-nic">Auto</span>
+        </div>
+      </div>
+
+      <!-- Card 2: Monitored DNS Records -->
+      <div class="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-4.5 backdrop-blur-md relative overflow-hidden">
+        <div class="flex items-center justify-between text-xs text-zinc-400 mb-2">
+          <span class="font-medium">Monitored Records</span>
+          <svg class="w-4 h-4 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+        </div>
+        <div class="flex items-baseline gap-2">
+          <div class="font-mono text-lg sm:text-xl font-bold text-zinc-100" id="kpi-records-count">0</div>
+          <span class="text-xs text-zinc-400" id="kpi-records-sub">records</span>
+        </div>
+        <div class="text-[11px] text-zinc-400 mt-2 font-mono flex items-center gap-1.5">
+          <span>Across:</span>
+          <span class="text-zinc-300 font-semibold" id="kpi-zones-count">0 zones</span>
+        </div>
+      </div>
+
+      <!-- Card 3: Sync Engine Frequency -->
+      <div class="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-4.5 backdrop-blur-md relative overflow-hidden">
+        <div class="flex items-center justify-between text-xs text-zinc-400 mb-2">
+          <span class="font-medium">Sync Engine</span>
+          <svg class="w-4 h-4 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+        </div>
+        <div class="flex items-baseline gap-2">
+          <div class="font-mono text-lg sm:text-xl font-bold text-zinc-100" id="kpi-interval-val">300s</div>
+          <span class="text-xs text-zinc-400 font-mono" id="kpi-interval-human">(5m)</span>
+        </div>
+        <div class="text-[11px] text-zinc-400 mt-2 flex items-center gap-1.5 font-mono">
+          <span>NetWatcher:</span>
+          <span class="text-emerald-400 font-semibold">Active & Event-driven</span>
+        </div>
+      </div>
+
+      <!-- Card 4: Daemon & Service -->
+      <div class="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-4.5 backdrop-blur-md relative overflow-hidden">
+        <div class="flex items-center justify-between text-xs text-zinc-400 mb-2">
+          <span class="font-medium">Service Status</span>
+          <div id="dash-kpi-pill" class="w-2 h-2 rounded-full bg-zinc-500"></div>
+        </div>
+        <div class="font-mono text-sm sm:text-base font-bold text-zinc-100 truncate" id="dash-kpi-service-label">Standalone CLI</div>
+        <div class="text-[11px] text-zinc-400 mt-2 flex items-center gap-1.5 font-mono truncate" id="dash-kpi-service-sub">
+          <span>Target:</span>
+          <span class="text-zinc-300">./c2go</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Dashboard Grid (2 Columns: 8 cols Workspace, 4 cols Quick Configuration) -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-start">
+      
+      <!-- Left 8 Columns: Dynamic DNS Operations & History -->
+      <div class="lg:col-span-8 space-y-6">
+        
+        <!-- Toast / Action Feedback Banner -->
+        <div id="dash-alert-box" class="p-3.5 rounded-lg text-xs font-medium flex items-center gap-2.5 hidden"></div>
+
+        <!-- Section 1: IP Change History Audit Log (Live Metrics & Audit) -->
+        <section class="bg-zinc-900/50 border border-zinc-800/80 rounded-xl p-5 sm:p-6 backdrop-blur-md shadow-sm space-y-4">
+          <div class="flex items-center justify-between border-b border-zinc-800/60 pb-3">
+            <div class="flex items-center gap-2.5">
+              <div class="w-6 h-6 rounded-md bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
+              </div>
+              <h2 class="text-sm sm:text-base font-bold text-zinc-100">IP Change History & Activity Audit</h2>
+            </div>
+            <span class="text-[11px] font-mono text-zinc-400" id="history-count-badge">0 events</span>
+          </div>
+
+          <!-- History Entries Table / Timeline -->
+          <div class="overflow-x-auto max-h-[220px] overflow-y-auto pr-1">
+            <table class="w-full text-left text-xs font-mono">
+              <thead class="text-[11px] uppercase tracking-wider text-zinc-400 border-b border-zinc-800 bg-zinc-950/40 sticky top-0">
+                <tr>
+                  <th class="py-2 px-3">Timestamp</th>
+                  <th class="py-2 px-3">Detected Public IP</th>
+                  <th class="py-2 px-3 text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody id="history-table-body" class="divide-y divide-zinc-800/40 text-zinc-300">
+                <tr>
+                  <td colspan="3" class="py-6 text-center text-zinc-500 font-sans text-xs">No IP change events recorded yet in history.json</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Section 2: Multi-NIC Priority & Adapter Routing -->
+        <section class="bg-zinc-900/50 border border-zinc-800/80 rounded-xl p-5 sm:p-6 backdrop-blur-md shadow-sm space-y-4">
+          <div class="flex items-center justify-between border-b border-zinc-800/60 pb-3">
+            <div class="flex items-center gap-2.5">
+              <div class="w-6 h-6 rounded-md bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg>
+              </div>
+              <div>
+                <h2 class="text-sm sm:text-base font-bold text-zinc-100">Network Interfaces (Multi-NIC Priority)</h2>
+              </div>
+            </div>
+            <span class="text-[11px] font-mono text-zinc-400" id="dash-nics-badge-count">0 detected</span>
+          </div>
+
+          <p class="text-xs text-zinc-400 leading-relaxed">
+            Prioritize network adapters (Ethernet, Wi-Fi, 4G/5G). c2go binds its socket directly to the highest priority active interface and falls back seamlessly if connection drops.
+          </p>
+
+          <div id="dash-interfaces-list" class="space-y-2 pt-1">
+            <div class="text-xs text-zinc-500 py-4 text-center border border-zinc-800/60 rounded-lg">Scanning network adapters...</div>
+          </div>
+        </section>
+
+        <!-- Section 3: Managed Zones & DNS Records -->
+        <section class="bg-zinc-900/50 border border-zinc-800/80 rounded-xl p-5 sm:p-6 backdrop-blur-md shadow-sm space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800/60 pb-3">
+            <div class="flex items-center gap-2.5">
+              <div class="w-6 h-6 rounded-md bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+              </div>
+              <h2 class="text-sm sm:text-base font-bold text-zinc-100">Managed Domains & Records</h2>
+            </div>
+            <!-- Domain Switcher -->
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-zinc-400 font-mono">Domain:</span>
+              <select id="dash-domain-select" class="px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs font-mono text-zinc-200 focus:outline-none focus:border-rose-500 cursor-pointer"></select>
+            </div>
+          </div>
+
+          <!-- Records Cards Grid -->
+          <div id="dash-records-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[260px] overflow-y-auto pr-1"></div>
+
+          <!-- Inline Record Creator -->
+          <div class="p-3.5 bg-zinc-950/70 border border-dashed border-zinc-750 rounded-xl space-y-2.5 mt-2">
+            <span class="text-xs font-semibold text-zinc-300 block">Add New DNS A Record to Active Domain:</span>
+            <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2 items-center">
+              <input type="text" id="dash-new-record-name" placeholder="subdomain (e.g. vpn or dev)" class="px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-100 text-xs font-mono focus:outline-none focus:border-rose-500" />
+              <label class="flex items-center gap-1.5 text-xs font-medium text-zinc-200 cursor-pointer select-none px-2.5 py-2 bg-zinc-900 rounded-lg border border-zinc-800">
+                <input type="checkbox" id="dash-new-record-proxied" class="w-3.5 h-3.5 rounded border-zinc-700 bg-zinc-950 text-rose-600 focus:ring-rose-500">
+                <span>Proxy</span>
+              </label>
+              <button type="button" id="btn-dash-add-record" class="px-3.5 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-100 font-medium text-xs border border-zinc-700 cursor-pointer">Add Record</button>
+            </div>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- Right 4 Columns: Configuration Settings & Service Panel -->
+      <aside class="lg:col-span-4 space-y-6">
+        
+        <!-- Action Card: Save Settings -->
+        <div class="bg-gradient-to-b from-zinc-900 to-zinc-950 border border-zinc-800 rounded-xl p-5 space-y-4 shadow-md">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold uppercase tracking-wider text-zinc-300">Configuration Actions</span>
+            <span class="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono">Ready</span>
+          </div>
+
+          <button type="button" id="btn-dash-save" class="w-full py-3 px-4 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs sm:text-sm transition-all shadow-md shadow-rose-950 flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]">
+            <span id="dash-btn-text-save">Save & Apply Changes</span>
+            <span id="dash-btn-spin-save" class="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin hidden"></span>
+          </button>
+
+          <div class="pt-2 border-t border-zinc-800/60 flex justify-between items-center text-[11px]">
+            <span class="text-zinc-500 font-mono">config.json</span>
+            <button type="button" id="btn-relaunch-wizard" class="text-rose-400 hover:text-rose-300 font-medium cursor-pointer">
+              Run Setup Wizard Again &#8594;
+            </button>
+          </div>
+        </div>
+
+        <!-- Automation & Interval Options -->
+        <div class="bg-zinc-900/50 border border-zinc-800/80 rounded-xl p-5 space-y-4 backdrop-blur-md">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-zinc-300">Automation Settings</h3>
+          
+          <div class="space-y-2">
+            <label class="text-xs font-medium text-zinc-400 block">Fallback Check Interval</label>
+            <div class="grid grid-cols-2 gap-1.5">
+              <button type="button" class="dash-interval-chip px-2.5 py-2 rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-300 font-mono text-xs hover:border-zinc-700 cursor-pointer" data-val="60">60s (1m)</button>
+              <button type="button" class="dash-interval-chip active px-2.5 py-2 rounded-lg border border-rose-500 bg-rose-500/10 text-rose-300 font-mono text-xs font-semibold cursor-pointer" data-val="300">300s (5m)</button>
+              <button type="button" class="dash-interval-chip px-2.5 py-2 rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-300 font-mono text-xs hover:border-zinc-700 cursor-pointer" data-val="600">600s (10m)</button>
+              <button type="button" class="dash-interval-chip px-2.5 py-2 rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-300 font-mono text-xs hover:border-zinc-700 cursor-pointer" data-val="1800">1800s (30m)</button>
+            </div>
+            <input type="hidden" id="dash-input-interval" value="300" />
+          </div>
+
+          <div class="space-y-2 pt-2 border-t border-zinc-800/60 text-xs">
+            <div class="flex items-center justify-between py-1">
+              <span class="text-zinc-300">Audit History Logging</span>
+              <input type="checkbox" id="dash-input-history" checked class="w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-rose-600 focus:ring-rose-500 cursor-pointer">
+            </div>
+            <div class="flex items-center justify-between py-1">
+              <span class="text-zinc-300">GitHub Release Alerts</span>
+              <input type="checkbox" id="dash-input-updates" checked class="w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-rose-600 focus:ring-rose-500 cursor-pointer">
+            </div>
+            <div class="flex items-center justify-between py-1">
+              <span class="text-zinc-300">Auto Self-Update</span>
+              <input type="checkbox" id="dash-input-autoupdate" class="w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-rose-600 focus:ring-rose-500 cursor-pointer">
+            </div>
+          </div>
+        </div>
+
+        <!-- Cloudflare API Credentials -->
+        <div class="bg-zinc-900/50 border border-zinc-800/80 rounded-xl p-5 space-y-3.5 backdrop-blur-md">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-zinc-300">Cloudflare API Token</h3>
+          <div class="space-y-1.5">
+            <div class="relative">
+              <input type="password" id="dash-input-token" class="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-100 placeholder-zinc-500 font-mono text-xs focus:outline-none focus:border-rose-500 pr-12" placeholder="Cloudflare API Token" />
+              <button type="button" id="btn-dash-toggle-token" class="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-zinc-400 hover:text-zinc-200 px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 font-mono cursor-pointer">Show</button>
+            </div>
+            <p class="text-[10px] text-zinc-500">Stored in system keyring / protected config fallback.</p>
+          </div>
+        </div>
+
+        <!-- Service / Host Commands -->
+        <div class="bg-zinc-900/50 border border-zinc-800/80 rounded-xl p-5 space-y-3 backdrop-blur-md">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-zinc-300">Daemon Execution</h3>
+          <div class="space-y-1.5">
+            <div class="text-[11px] text-zinc-400 font-medium" id="dash-lbl-cmd-title">Command to start or restart:</div>
+            <div class="flex items-center justify-between p-2.5 bg-zinc-950 rounded-lg border border-zinc-800 font-mono text-xs">
+              <code class="text-zinc-200 truncate pr-2" id="dash-cmd-to-run">./c2go</code>
+              <button type="button" id="btn-dash-copy-cmd" class="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-[10px] flex-shrink-0 cursor-pointer">
+                <span id="dash-btn-copy-text">Copy</span>
+              </button>
+            </div>
+          </div>
+          <p class="text-[11px] text-zinc-400 leading-relaxed" id="dash-os-help-note">
+            Run the command in your terminal to start background synchronization.
+          </p>
+        </div>
+
+      </aside>
+
+    </div>
+  </main>
+
+
+  <!-- ========================================================================= -->
+  <!-- VIEW 2: ONBOARDING WIZARD (Shown when is_configured == false) -->
+  <!-- ========================================================================= -->
+  <main id="view-wizard" class="max-w-6xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-start hidden">
     
     <!-- Left Column: Step Navigation & Realtime Summary (4 cols) -->
     <aside class="lg:col-span-4 space-y-4">
-      <!-- Stepper Nav Card -->
       <div class="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-4 space-y-1.5 backdrop-blur-sm">
         <h2 class="text-[11px] font-bold uppercase tracking-wider text-zinc-400 px-2 mb-2" id="sidebar-nav-title">Configuration Progress</h2>
         
         <div class="space-y-1" id="wizard-nav-list">
-          <!-- Step 1 Nav -->
-          <div class="step-nav-btn active flex items-start gap-3 p-2.5 rounded-lg transition-all cursor-pointer hover:bg-zinc-850/50" id="nav-step-1" onclick="goToStep(1)">
+          <div class="step-nav-btn active flex items-start gap-3 p-2.5 rounded-lg transition-all" id="nav-step-1">
             <div class="step-nav-icon w-6 h-6 rounded-md bg-rose-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">1</div>
             <div>
               <div class="font-medium text-xs sm:text-sm text-zinc-100 step-nav-title" id="nav-lbl-1">Authentication</div>
@@ -52,8 +320,7 @@ import Layout from '../layouts/Layout.astro';
             </div>
           </div>
 
-          <!-- Step 2 Nav -->
-          <div class="step-nav-btn flex items-start gap-3 p-2.5 rounded-lg transition-all cursor-pointer hover:bg-zinc-850/50" id="nav-step-2">
+          <div class="step-nav-btn flex items-start gap-3 p-2.5 rounded-lg transition-all" id="nav-step-2">
             <div class="step-nav-icon w-6 h-6 rounded-md bg-zinc-800 text-zinc-400 border border-zinc-700 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">2</div>
             <div>
               <div class="font-medium text-xs sm:text-sm text-zinc-400 step-nav-title" id="nav-lbl-2">Managed Domains</div>
@@ -61,8 +328,7 @@ import Layout from '../layouts/Layout.astro';
             </div>
           </div>
 
-          <!-- Step 3 Nav -->
-          <div class="step-nav-btn flex items-start gap-3 p-2.5 rounded-lg transition-all cursor-pointer hover:bg-zinc-850/50" id="nav-step-3">
+          <div class="step-nav-btn flex items-start gap-3 p-2.5 rounded-lg transition-all" id="nav-step-3">
             <div class="step-nav-icon w-6 h-6 rounded-md bg-zinc-800 text-zinc-400 border border-zinc-700 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">3</div>
             <div>
               <div class="font-medium text-xs sm:text-sm text-zinc-400 step-nav-title" id="nav-lbl-3">DNS Records</div>
@@ -70,8 +336,7 @@ import Layout from '../layouts/Layout.astro';
             </div>
           </div>
 
-          <!-- Step 4 Nav -->
-          <div class="step-nav-btn flex items-start gap-3 p-2.5 rounded-lg transition-all cursor-pointer hover:bg-zinc-850/50" id="nav-step-4">
+          <div class="step-nav-btn flex items-start gap-3 p-2.5 rounded-lg transition-all" id="nav-step-4">
             <div class="step-nav-icon w-6 h-6 rounded-md bg-zinc-800 text-zinc-400 border border-zinc-700 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">4</div>
             <div>
               <div class="font-medium text-xs sm:text-sm text-zinc-400 step-nav-title" id="nav-lbl-4">Automation</div>
@@ -79,8 +344,7 @@ import Layout from '../layouts/Layout.astro';
             </div>
           </div>
 
-          <!-- Step 5 Nav -->
-          <div class="step-nav-btn flex items-start gap-3 p-2.5 rounded-lg transition-all cursor-pointer hover:bg-zinc-850/50" id="nav-step-5">
+          <div class="step-nav-btn flex items-start gap-3 p-2.5 rounded-lg transition-all" id="nav-step-5">
             <div class="step-nav-icon w-6 h-6 rounded-md bg-zinc-800 text-zinc-400 border border-zinc-700 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">5</div>
             <div>
               <div class="font-medium text-xs sm:text-sm text-zinc-400 step-nav-title" id="nav-lbl-5">Review & Save</div>
@@ -90,7 +354,6 @@ import Layout from '../layouts/Layout.astro';
         </div>
       </div>
 
-      <!-- Real-time Live Summary Widget -->
       <div class="bg-zinc-900/30 border border-zinc-800/60 rounded-xl p-4 space-y-3">
         <div class="flex items-center justify-between">
           <span class="text-[11px] font-bold uppercase tracking-wider text-zinc-400" id="sum-widget-title">Configuration Snapshot</span>
@@ -126,10 +389,9 @@ import Layout from '../layouts/Layout.astro';
       </div>
     </aside>
 
-    <!-- Right Column: Interactive Workspace (8 cols) -->
+    <!-- Right Column: Step Forms (8 cols) -->
     <section class="lg:col-span-8 bg-zinc-900/50 border border-zinc-800/80 rounded-xl p-5 sm:p-7 backdrop-blur-md shadow-lg shadow-black/30 min-h-[500px] flex flex-col justify-between">
       
-      <!-- Alert Message Banner -->
       <div id="alert-box" class="p-3.5 rounded-lg text-xs font-medium mb-5 flex items-center gap-2.5 hidden"></div>
 
       <!-- STEP 1: AUTH -->
@@ -147,7 +409,6 @@ import Layout from '../layouts/Layout.astro';
           </div>
         </div>
 
-        <!-- Token permissions checklist helper -->
         <div class="p-3.5 bg-zinc-950/60 border border-zinc-800/80 rounded-lg space-y-2 text-xs">
           <span class="font-semibold text-zinc-300 block" id="step1-help-title">Required Permissions:</span>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-zinc-400">
@@ -170,7 +431,7 @@ import Layout from '../layouts/Layout.astro';
         </div>
       </div>
 
-      <!-- STEP 2: ZONES SELECTION (GRID LAYOUT) -->
+      <!-- STEP 2: ZONES SELECTION -->
       <div id="step-2" class="space-y-5 hidden">
         <div>
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -182,12 +443,10 @@ import Layout from '../layouts/Layout.astro';
           </div>
         </div>
 
-        <!-- Search Bar -->
         <div>
           <input type="text" id="zones-search" placeholder="Filter domains..." class="w-full px-3.5 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-100 text-xs sm:text-sm focus:outline-none focus:border-rose-500" />
         </div>
 
-        <!-- 2-Column Domain Cards Grid -->
         <div id="zones-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[320px] overflow-y-auto pr-1"></div>
 
         <div class="flex justify-between items-center pt-5 border-t border-zinc-800/80">
@@ -199,7 +458,7 @@ import Layout from '../layouts/Layout.astro';
         </div>
       </div>
 
-      <!-- STEP 3: DNS RECORDS SELECTION & CREATION (GRID LAYOUT) -->
+      <!-- STEP 3: DNS RECORDS -->
       <div id="step-3" class="space-y-5 hidden">
         <div>
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -207,15 +466,12 @@ import Layout from '../layouts/Layout.astro';
               <h2 class="text-lg sm:text-xl font-bold text-zinc-100" id="step3-title">DNS Records</h2>
               <p class="text-xs sm:text-sm text-zinc-400 mt-0.5" id="step3-desc">Select records to associate with your dynamic IP.</p>
             </div>
-            <!-- Zone Switcher Badge / Tabs -->
             <div id="zone-tab-badge" class="px-2.5 py-0.5 bg-amber-500/10 border border-amber-500/30 text-amber-300 rounded-md text-xs font-mono font-semibold self-start sm:self-auto">Domain 1 of 1</div>
           </div>
         </div>
 
-        <!-- 2-Column Records Cards Grid -->
         <div id="records-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[260px] overflow-y-auto pr-1"></div>
 
-        <!-- Inline Record Creator Drawer -->
         <div class="p-3.5 bg-zinc-950/70 border border-dashed border-zinc-750 rounded-xl space-y-2.5">
           <span class="text-xs font-semibold text-zinc-300 block" id="lbl-create-record-title">Create New DNS A Record</span>
           <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2 items-center">
@@ -243,7 +499,6 @@ import Layout from '../layouts/Layout.astro';
           <p class="text-xs sm:text-sm text-zinc-400 mt-0.5" id="step4-desc">Configure backup check frequency and self-update preferences.</p>
         </div>
 
-        <!-- Interval Options Grid -->
         <div class="space-y-2">
           <label class="text-xs font-semibold text-zinc-300 block" id="lbl-interval">Backup Check Interval</label>
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -255,7 +510,6 @@ import Layout from '../layouts/Layout.astro';
           <input type="hidden" id="input-interval" value="300" />
         </div>
 
-        <!-- Feature Switches List -->
         <div class="space-y-2.5 pt-1">
           <div class="flex items-center justify-between p-3.5 bg-zinc-950/60 border border-zinc-800 rounded-xl">
             <div>
@@ -290,7 +544,6 @@ import Layout from '../layouts/Layout.astro';
             </label>
           </div>
 
-          <!-- Network Interfaces / Multi-NIC Priority -->
           <div class="pt-4 border-t border-zinc-800/80 space-y-3">
             <div>
               <div class="text-xs sm:text-sm font-semibold text-zinc-100 flex items-center justify-between">
@@ -302,7 +555,6 @@ import Layout from '../layouts/Layout.astro';
               </div>
             </div>
 
-            <!-- Interactive NIC Priority List -->
             <div id="interfaces-list" class="space-y-2">
               <div class="text-xs text-zinc-500 py-3 text-center border border-zinc-800/60 rounded-lg">Scanning network interfaces...</div>
             </div>
@@ -358,7 +610,7 @@ import Layout from '../layouts/Layout.astro';
         </div>
       </div>
 
-      <!-- SUCCESS SCREEN (SERVICE AWARE) -->
+      <!-- SUCCESS SCREEN -->
       <div id="step-success" class="space-y-6 py-4 hidden">
         <div class="flex items-center gap-3">
           <div class="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center flex-shrink-0">
@@ -370,7 +622,6 @@ import Layout from '../layouts/Layout.astro';
           </div>
         </div>
 
-        <!-- Service & Execution Status Card -->
         <div class="p-4 bg-zinc-950 border border-zinc-800 rounded-xl space-y-3.5">
           <div class="flex items-center justify-between">
             <span class="text-xs font-semibold text-zinc-300" id="lbl-how-to-start">Service / Process Status:</span>
@@ -380,7 +631,6 @@ import Layout from '../layouts/Layout.astro';
             </div>
           </div>
 
-          <!-- Command Box with One-Click Copy -->
           <div class="space-y-1.5">
             <div class="text-[11px] text-zinc-400 font-medium" id="lbl-cmd-title">Command to start or restart:</div>
             <div class="flex items-center justify-between p-3 bg-zinc-900 rounded-lg border border-zinc-800">
@@ -392,13 +642,15 @@ import Layout from '../layouts/Layout.astro';
             </div>
           </div>
 
-          <!-- Contextual note -->
           <p class="text-xs text-zinc-400 leading-relaxed" id="os-help-note">
             Run the command in your terminal to start real-time dynamic DNS synchronization.
           </p>
         </div>
 
-        <div class="flex justify-end pt-4 border-t border-zinc-800/80">
+        <div class="flex justify-between items-center pt-4 border-t border-zinc-800/80">
+          <button type="button" id="btn-goto-dashboard" class="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-xs font-semibold border border-zinc-700 cursor-pointer">
+            Open Dashboard &#8594;
+          </button>
           <div class="text-xs text-zinc-500 font-mono">Setup completed. Press Ctrl+C in terminal to exit server.</div>
         </div>
       </div>
@@ -409,7 +661,7 @@ import Layout from '../layouts/Layout.astro';
 
 <script>
   import { translations } from '../lib/i18n';
-  import type { CloudflareZone, DNSRecord, ConfigPayload, NetworkInterface, ServiceStatusInfo } from '../lib/types';
+  import type { CloudflareZone, DNSRecord, ConfigPayload, NetworkInterface, ServiceStatusInfo, HistoryEntry } from '../lib/types';
 
   let currentLang: 'en' | 'es' = 'en';
   let availableZones: CloudflareZone[] = [];
@@ -419,13 +671,14 @@ import Layout from '../layouts/Layout.astro';
   let currentPublicIP = '';
   let detectedInterfaces: NetworkInterface[] = [];
   let preferredInterfaces: string[] = [];
+  let historyEntries: HistoryEntry[] = [];
   let serviceStatus: ServiceStatusInfo | null = null;
+  let isConfigured = false;
 
   function switchLanguage(lang: 'en' | 'es') {
     currentLang = lang;
     const t = translations[lang] || translations.en;
     
-    // Update labels and navigation
     const setTxt = (id: string, text: string) => {
       const el = document.getElementById(id);
       if (el) el.innerText = text;
@@ -452,13 +705,65 @@ import Layout from '../layouts/Layout.astro';
     setTxt('lbl-autoupdate', t.autoupdate);
     setTxt('lbl-autoupdate-desc', t.autoupdate_desc);
     setTxt('lbl-nics', t.network_interfaces || 'Network Interfaces (Multi-NIC Priority)');
-    setTxt('lbl-nics-desc', t.network_interfaces_desc || 'Prioritize interfaces for IP detection. If the top interface goes down, c2go falls back automatically.');
+    setTxt('lbl-nics-desc', t.network_interfaces_desc || 'Prioritize interfaces for IP detection.');
     setTxt('btn-text-save', t.save_finish);
     setTxt('lbl-success-title', t.success_title);
     setTxt('lbl-success-desc', t.success_desc);
+    setTxt('dash-btn-text-save', t.save_changes || 'Save & Apply Changes');
+
     updateServiceStatus();
     renderInterfacesList();
+    renderDashInterfacesList();
+    renderHistoryTable();
     updateSummary();
+  }
+
+  function showView(isDashboard: boolean) {
+    const loader = document.getElementById('view-loader');
+    const dashView = document.getElementById('view-dashboard');
+    const wizView = document.getElementById('view-wizard');
+    const modeBadge = document.getElementById('header-mode-badge');
+    const badgeText = document.getElementById('header-badge-text');
+    const badgeDot = document.getElementById('header-badge-dot');
+
+    if (loader) loader.classList.add('hidden');
+
+    if (isDashboard) {
+      if (dashView) dashView.classList.remove('hidden');
+      if (wizView) wizView.classList.add('hidden');
+      if (modeBadge) {
+        modeBadge.className = 'px-2 py-0.5 rounded bg-emerald-500/15 text-[10px] font-mono text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5 font-medium';
+        if (badgeDot) badgeDot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400';
+        if (badgeText) badgeText.innerText = 'Active Config';
+      }
+      renderDashDomains();
+      renderDashInterfacesList();
+      renderHistoryTable();
+    } else {
+      if (dashView) dashView.classList.add('hidden');
+      if (wizView) wizView.classList.remove('hidden');
+      if (modeBadge) {
+        modeBadge.className = 'px-2 py-0.5 rounded bg-zinc-850 text-[10px] font-mono text-zinc-400 border border-zinc-750 flex items-center gap-1.5';
+        if (badgeDot) badgeDot.className = 'w-1.5 h-1.5 rounded-full bg-zinc-500';
+        if (badgeText) badgeText.innerText = 'Setup Wizard';
+      }
+      goToStep(1);
+    }
+  }
+
+  function showDashAlert(msg: string, isError = false) {
+    const box = document.getElementById('dash-alert-box');
+    if (!box) return;
+    box.className = `p-3.5 rounded-lg text-xs font-medium mb-5 flex items-center gap-2.5 ${
+      isError ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+    }`;
+    box.innerText = msg;
+    box.classList.remove('hidden');
+  }
+
+  function hideDashAlert() {
+    const box = document.getElementById('dash-alert-box');
+    if (box) box.classList.add('hidden');
   }
 
   function showAlert(msg: string, isError = true) {
@@ -485,17 +790,17 @@ import Layout from '../layouts/Layout.astro';
       if (nav) {
         nav.classList.remove('active');
         const icon = nav.querySelector('.step-nav-icon');
-        if (i < num) {
-          nav.classList.add('completed');
-          if (icon) {
-            icon.className = 'step-nav-icon w-6 h-6 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5';
-            icon.innerHTML = '<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>';
-          }
-        } else if (i === num) {
+        if (i === num) {
           nav.classList.add('active');
           if (icon) {
             icon.className = 'step-nav-icon w-6 h-6 rounded-md bg-rose-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5 shadow-sm shadow-rose-950';
             icon.innerText = i.toString();
+          }
+        } else if (i < num) {
+          nav.classList.add('completed');
+          if (icon) {
+            icon.className = 'step-nav-icon w-6 h-6 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5';
+            icon.innerHTML = '<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>';
           }
         } else {
           nav.classList.remove('completed');
@@ -508,7 +813,60 @@ import Layout from '../layouts/Layout.astro';
     }
     const target = document.getElementById(`step-${num}`);
     if (target) target.classList.remove('hidden');
+    if (num === 2) renderZonesGrid();
+    if (num === 3 && selectedZones.length > 0) loadRecordsForZone(currentZoneIndex);
+    if (num === 4) renderInterfacesList();
     updateSummary();
+  }
+
+  function renderHistoryTable() {
+    const tbody = document.getElementById('history-table-body');
+    const countBadge = document.getElementById('history-count-badge');
+    if (!tbody) return;
+
+    if (countBadge) countBadge.innerText = `${historyEntries.length} event${historyEntries.length === 1 ? '' : 's'}`;
+
+    if (!historyEntries || historyEntries.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="3" class="py-6 text-center text-zinc-500 font-sans text-xs">No IP change events recorded yet in history.json</td>
+        </tr>
+      `;
+      return;
+    }
+
+    tbody.innerHTML = '';
+    // Reverse so latest is on top
+    const reversed = [...historyEntries].reverse();
+
+    reversed.forEach((entry, idx) => {
+      const tr = document.createElement('tr');
+      tr.className = 'hover:bg-zinc-800/30 transition-colors';
+
+      let timeFormatted = entry.timestamp;
+      try {
+        const d = new Date(entry.timestamp);
+        timeFormatted = d.toLocaleString();
+      } catch (_) {}
+
+      const isCurrent = entry.ip === currentPublicIP;
+
+      tr.innerHTML = `
+        <td class="py-2.5 px-3 text-zinc-400">${timeFormatted}</td>
+        <td class="py-2.5 px-3 font-semibold text-zinc-200">
+          <div class="flex items-center gap-2">
+            <span>${entry.ip}</span>
+            ${isCurrent ? '<span class="px-1.5 py-0.2 rounded text-[10px] font-mono bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">Current</span>' : ''}
+          </div>
+        </td>
+        <td class="py-2.5 px-3 text-right">
+          <span class="inline-flex items-center gap-1 text-[11px] text-emerald-400">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Synced
+          </span>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
   }
 
   function updateServiceStatus() {
@@ -518,27 +876,42 @@ import Layout from '../layouts/Layout.astro';
     const noteEl = document.getElementById('os-help-note');
     const cmdTitle = document.getElementById('lbl-cmd-title');
 
-    if (!serviceStatus) {
-      if (pillText) pillText.innerText = 'Standalone CLI';
-      if (cmdEl) cmdEl.innerText = './c2go';
-      return;
+    // Dashboard elements
+    const dashCmdEl = document.getElementById('dash-cmd-to-run');
+    const dashNoteEl = document.getElementById('dash-os-help-note');
+    const dashCmdTitle = document.getElementById('dash-lbl-cmd-title');
+    const dashKpiPill = document.getElementById('dash-kpi-pill');
+    const dashKpiLabel = document.getElementById('dash-kpi-service-label');
+    const dashKpiSub = document.getElementById('dash-kpi-service-sub');
+
+    if (!serviceStatus) return;
+
+    const cmdStr = serviceStatus.suggested_cmd || './c2go';
+    const noteStr = serviceStatus.action_note || 'Run ./c2go in your terminal.';
+
+    if (cmdEl) cmdEl.innerText = cmdStr;
+    if (dashCmdEl) dashCmdEl.innerText = cmdStr;
+    if (noteEl) noteEl.innerText = noteStr;
+    if (dashNoteEl) dashNoteEl.innerText = noteStr;
+
+    if (dashKpiLabel) dashKpiLabel.innerText = serviceStatus.status_label;
+    if (dashKpiSub) dashKpiSub.innerHTML = `<span>Target:</span> <span class="text-zinc-300">${cmdStr}</span>`;
+
+    if (dashKpiPill) {
+      if (serviceStatus.is_running) dashKpiPill.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
+      else if (serviceStatus.is_installed) dashKpiPill.className = 'w-2 h-2 rounded-full bg-amber-400';
+      else dashKpiPill.className = 'w-2 h-2 rounded-full bg-zinc-500';
     }
 
-    if (cmdEl && serviceStatus.suggested_cmd) {
-      cmdEl.innerText = serviceStatus.suggested_cmd;
-    }
+    const titleStr = serviceStatus.is_running
+      ? (currentLang === 'es' ? 'Comando para reiniciar el servicio:' : 'Command to restart the service:')
+      : (currentLang === 'es' ? 'Comando para iniciar c2go:' : 'Command to start c2go:');
 
-    if (noteEl && serviceStatus.action_note) {
-      noteEl.innerText = serviceStatus.action_note;
-    }
+    if (cmdTitle) cmdTitle.innerText = titleStr;
+    if (dashCmdTitle) dashCmdTitle.innerText = titleStr;
 
-    if (cmdTitle) {
-      cmdTitle.innerText = serviceStatus.is_running
-        ? (currentLang === 'es' ? 'Comando para reiniciar el servicio:' : 'Command to restart the service:')
-        : (currentLang === 'es' ? 'Comando para iniciar c2go:' : 'Command to start c2go:');
-    }
-
-    if (pill) {
+    if (pill && pillText) {
+      pillText.innerText = serviceStatus.status_label;
       if (serviceStatus.is_running) {
         pill.className = 'flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-mono font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/30';
         pill.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span><span>${serviceStatus.status_label}</span>`;
@@ -555,17 +928,25 @@ import Layout from '../layouts/Layout.astro';
   function renderInterfacesList() {
     const container = document.getElementById('interfaces-list');
     const countEl = document.getElementById('lbl-nics-count');
+    renderGenericNICList(container, countEl);
+  }
+
+  function renderDashInterfacesList() {
+    const container = document.getElementById('dash-interfaces-list');
+    const countEl = document.getElementById('dash-nics-badge-count');
+    renderGenericNICList(container, countEl);
+  }
+
+  function renderGenericNICList(container: HTMLElement | null, countEl: HTMLElement | null) {
     if (!container) return;
     if (countEl) countEl.innerText = `${detectedInterfaces.length} detected`;
 
     if (!detectedInterfaces || detectedInterfaces.length === 0) {
-      container.innerHTML = `<div class="text-xs text-zinc-500 py-3 text-center border border-zinc-800/60 rounded-lg">No physical network interfaces found. Using system default routing.</div>`;
+      container.innerHTML = `<div class="text-xs text-zinc-500 py-4 text-center border border-zinc-800/60 rounded-lg">No physical network adapters found. Using default system routing.</div>`;
       return;
     }
 
-    // Build list: first items in preferredInterfaces in order, then the remaining detected interfaces
     const orderedList: { iface: NetworkInterface; isSelected: boolean; priority: number }[] = [];
-    
     preferredInterfaces.forEach((name, idx) => {
       const found = detectedInterfaces.find(i => i.name === name);
       if (found) {
@@ -583,7 +964,7 @@ import Layout from '../layouts/Layout.astro';
 
     container.innerHTML = '';
 
-    orderedList.forEach((item, index) => {
+    orderedList.forEach((item) => {
       const { iface, isSelected, priority } = item;
       const isFirst = isSelected && priority === 1;
       const isLastSelected = isSelected && priority === preferredInterfaces.length;
@@ -591,7 +972,7 @@ import Layout from '../layouts/Layout.astro';
       const card = document.createElement('div');
       card.className = `p-3 rounded-lg border transition-all duration-150 flex items-center justify-between gap-3 ${
         isSelected
-          ? 'bg-zinc-900/90 border-rose-500/50 shadow-sm shadow-rose-950/20'
+          ? 'bg-zinc-900/90 border-rose-500/50 shadow-sm shadow-rose-950/20 ring-1 ring-rose-500/20'
           : 'bg-zinc-950/60 border-zinc-800/80 opacity-70 hover:opacity-100 hover:border-zinc-700'
       }`;
 
@@ -610,7 +991,7 @@ import Layout from '../layouts/Layout.astro';
               <span class="font-mono font-semibold text-xs sm:text-sm text-zinc-100">${iface.name}</span>
               <span class="px-1.5 py-0.2 rounded text-[10px] font-mono border flex-shrink-0 ${
                 iface.up ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-zinc-800 text-zinc-500 border-zinc-700'
-              }">${iface.up ? 'UP / ACTIVE' : 'DOWN'}</span>
+              }">${iface.up ? 'UP' : 'DOWN'}</span>
               ${isSelected ? `
                 <span class="px-1.5 py-0.2 rounded text-[10px] font-mono font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/30">
                   #${priority} ${priority === 1 ? '(Primary)' : ''}
@@ -633,7 +1014,7 @@ import Layout from '../layouts/Layout.astro';
               <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
             </button>
           ` : `
-            <button type="button" class="btn-nic-add px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium border border-zinc-700 transition-all cursor-pointer" data-name="${iface.name}">
+            <button type="button" class="btn-nic-add px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium border border-zinc-700 transition-all cursor-pointer" data-name="${iface.name}">
               + Prioritize
             </button>
           `}
@@ -643,7 +1024,6 @@ import Layout from '../layouts/Layout.astro';
       container.appendChild(card);
     });
 
-    // Bind event listeners for NIC controls
     container.querySelectorAll('.nic-toggle-btn, .btn-nic-add').forEach(el => {
       el.addEventListener('click', (e) => {
         const target = e.currentTarget as HTMLElement;
@@ -655,6 +1035,7 @@ import Layout from '../layouts/Layout.astro';
           preferredInterfaces.push(name);
         }
         renderInterfacesList();
+        renderDashInterfacesList();
         updateSummary();
       });
     });
@@ -670,6 +1051,7 @@ import Layout from '../layouts/Layout.astro';
           preferredInterfaces[idx - 1] = preferredInterfaces[idx];
           preferredInterfaces[idx] = temp;
           renderInterfacesList();
+          renderDashInterfacesList();
           updateSummary();
         }
       });
@@ -686,9 +1068,83 @@ import Layout from '../layouts/Layout.astro';
           preferredInterfaces[idx + 1] = preferredInterfaces[idx];
           preferredInterfaces[idx] = temp;
           renderInterfacesList();
+          renderDashInterfacesList();
           updateSummary();
         }
       });
+    });
+  }
+
+  function renderDashDomains() {
+    const select = document.getElementById('dash-domain-select') as HTMLSelectElement;
+    if (!select) return;
+    select.innerHTML = '';
+
+    if (selectedZones.length === 0) {
+      select.innerHTML = '<option value="">No domains configured</option>';
+      renderDashRecordsGrid('');
+      return;
+    }
+
+    selectedZones.forEach(z => {
+      const opt = document.createElement('option');
+      opt.value = z.name;
+      opt.innerText = z.name;
+      select.appendChild(opt);
+    });
+
+    const activeDomain = select.value || selectedZones[0]?.name || '';
+    renderDashRecordsGrid(activeDomain);
+  }
+
+  function renderDashRecordsGrid(domain: string) {
+    const container = document.getElementById('dash-records-grid');
+    if (!container) return;
+    container.innerHTML = '';
+    if (!domain) return;
+
+    const state = zoneRecordMap[domain];
+    if (!state || !state.records || state.records.length === 0) {
+      container.innerHTML = '<div class="col-span-2 text-xs text-zinc-500 py-6 text-center">No records monitored for this domain. Add one below:</div>';
+      return;
+    }
+
+    state.records.forEach(rec => {
+      const isSelected = state.selected.has(rec.id);
+      const isMatch = currentPublicIP !== '' && rec.content === currentPublicIP;
+      const ipLabel = rec.content ? rec.content : 'Unassigned';
+
+      const div = document.createElement('div');
+      div.className = `flex items-center justify-between p-3.5 bg-zinc-950 border rounded-lg cursor-pointer transition-all duration-150 ${
+        isSelected ? 'border-rose-500 bg-rose-500/10 shadow-sm shadow-rose-950/40 ring-1 ring-rose-500/50' : 'border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900'
+      }`;
+      div.onclick = () => {
+        if (state.selected.has(rec.id)) state.selected.delete(rec.id);
+        else state.selected.add(rec.id);
+        renderDashRecordsGrid(domain);
+        updateSummary();
+      };
+      div.innerHTML = `
+        <div class="pr-2 truncate space-y-1">
+          <div class="font-semibold text-xs sm:text-sm text-zinc-100 flex items-center gap-2 truncate">
+            <span class="truncate">${rec.name}</span>
+            <span class="px-1.5 py-0.5 rounded text-[10px] font-mono border flex-shrink-0 ${
+              rec.proxied ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-zinc-800 text-zinc-400 border-zinc-700'
+            }">${rec.proxied ? 'Proxied' : 'DNS'}</span>
+            ${isMatch ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-mono border bg-emerald-500/15 text-emerald-300 border-emerald-500/30 flex items-center gap-1 flex-shrink-0"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>Current IP</span>' : ''}
+          </div>
+          <div class="text-[11px] font-mono flex items-center gap-1.5 ${isMatch ? 'text-emerald-400 font-semibold' : 'text-zinc-400'}">
+            <span>IP:</span>
+            <span>${ipLabel}</span>
+          </div>
+        </div>
+        <div class="w-4 h-4 rounded border flex items-center justify-center transition-colors flex-shrink-0 ${
+          isSelected ? 'bg-rose-600 border-rose-600' : 'border-zinc-700 bg-zinc-900'
+        }">
+          ${isSelected ? '<svg class="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>' : ''}
+        </div>
+      `;
+      container.appendChild(div);
     });
   }
 
@@ -700,49 +1156,92 @@ import Layout from '../layouts/Layout.astro';
         if (data.service_status) serviceStatus = data.service_status;
         if (data.network_interfaces) detectedInterfaces = data.network_interfaces;
         if (data.preferred_interfaces) preferredInterfaces = data.preferred_interfaces;
+        if (data.history_entries) historyEntries = data.history_entries;
 
         if (data.language) {
           const langSelect = document.getElementById('input-lang') as HTMLSelectElement;
           if (langSelect) langSelect.value = data.language;
           switchLanguage(data.language);
         }
+
         if (data.token) {
           const tokenInput = document.getElementById('input-token') as HTMLInputElement;
+          const dashToken = document.getElementById('dash-input-token') as HTMLInputElement;
           if (tokenInput) tokenInput.value = data.token;
+          if (dashToken) dashToken.value = data.token;
         }
         if (data.update_interval) {
           const intervalInput = document.getElementById('input-interval') as HTMLInputElement;
+          const dashInterval = document.getElementById('dash-input-interval') as HTMLInputElement;
           if (intervalInput) intervalInput.value = data.update_interval;
-          document.querySelectorAll('.interval-chip').forEach(chip => {
+          if (dashInterval) dashInterval.value = data.update_interval;
+          
+          document.querySelectorAll('.dash-interval-chip, .interval-chip').forEach(chip => {
             if (chip.getAttribute('data-val') === data.update_interval.toString()) {
-              document.querySelectorAll('.interval-chip').forEach(c => c.className = 'interval-chip px-3 py-2.5 rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-300 font-mono text-xs sm:text-sm hover:border-zinc-700 cursor-pointer');
-              chip.className = 'interval-chip active px-3 py-2.5 rounded-lg border border-rose-500 bg-rose-500/10 text-rose-300 font-mono text-xs sm:text-sm font-semibold cursor-pointer';
+              chip.classList.add('active');
+            } else {
+              chip.classList.remove('active');
             }
           });
         }
         if (data.history_enabled !== undefined) {
           const histInput = document.getElementById('input-history') as HTMLInputElement;
+          const dashHist = document.getElementById('dash-input-history') as HTMLInputElement;
           if (histInput) histInput.checked = data.history_enabled;
+          if (dashHist) dashHist.checked = data.history_enabled;
         }
         if (data.check_updates !== undefined) {
           const updateInput = document.getElementById('input-updates') as HTMLInputElement;
+          const dashUpdates = document.getElementById('dash-input-updates') as HTMLInputElement;
           if (updateInput) updateInput.checked = data.check_updates;
+          if (dashUpdates) dashUpdates.checked = data.check_updates;
         }
         if (data.auto_update !== undefined) {
           const autoInput = document.getElementById('input-autoupdate') as HTMLInputElement;
+          const dashAuto = document.getElementById('dash-input-autoupdate') as HTMLInputElement;
           if (autoInput) autoInput.checked = data.auto_update;
+          if (dashAuto) dashAuto.checked = data.auto_update;
         }
         if (data.public_ip) {
           currentPublicIP = data.public_ip;
           const ipVal = document.getElementById('top-ip-val');
           if (ipVal) ipVal.innerText = currentPublicIP;
+          const kpiIP = document.getElementById('kpi-public-ip');
+          if (kpiIP) kpiIP.innerText = currentPublicIP;
         }
+
+        if (data.is_configured && data.managed_zones && data.managed_zones.length > 0) {
+          isConfigured = true;
+          availableZones = data.managed_zones.map((mz: any) => ({ name: mz.domain }));
+          selectedZones = [...availableZones];
+          data.managed_zones.forEach((mz: any) => {
+            const recs = (mz.records || []).map((r: any) => {
+              if (typeof r === 'string') {
+                return { id: r, name: r, type: 'A', content: currentPublicIP || '', proxied: false };
+              }
+              return r;
+            });
+            zoneRecordMap[mz.domain] = {
+              records: recs,
+              selected: new Set(recs.map((r: any) => r.id))
+            };
+          });
+
+          showView(true);
+        } else {
+          isConfigured = false;
+          showView(false);
+        }
+
         updateServiceStatus();
         renderInterfacesList();
+        renderDashInterfacesList();
+        renderHistoryTable();
         updateSummary();
       }
     } catch (e) {
       console.warn('Initial data warning:', e);
+      showView(false);
     }
   }
 
@@ -783,6 +1282,10 @@ import Layout from '../layouts/Layout.astro';
         const ipVal = document.getElementById('top-ip-val');
         if (ipVal) ipVal.innerText = currentPublicIP;
       }
+
+      const dashToken = document.getElementById('dash-input-token') as HTMLInputElement;
+      if (dashToken) dashToken.value = token;
+
       renderZonesGrid();
       goToStep(2);
     } catch (err: any) {
@@ -897,7 +1400,6 @@ import Layout from '../layouts/Layout.astro';
           <div class="text-[11px] font-mono flex items-center gap-1.5 ${isMatch ? 'text-emerald-400 font-semibold' : 'text-zinc-400'}">
             <span>IP:</span>
             <span>${ipLabel}</span>
-            ${!isMatch && currentPublicIP && rec.content ? `<span class="text-[10px] text-amber-400/90 font-sans font-normal">&#8594; will update</span>` : ''}
           </div>
         </div>
         <div class="w-4 h-4 rounded border flex items-center justify-center transition-colors flex-shrink-0 ${
@@ -910,19 +1412,22 @@ import Layout from '../layouts/Layout.astro';
     });
   }
 
-  async function createNewRecord() {
-    const zone = selectedZones[currentZoneIndex];
-    const hostInput = document.getElementById('new-record-name') as HTMLInputElement;
-    const proxiedInput = document.getElementById('new-record-proxied') as HTMLInputElement;
+  async function createNewRecord(isDash = false) {
+    const domainSelect = document.getElementById('dash-domain-select') as HTMLSelectElement;
+    const domain = isDash ? domainSelect?.value : selectedZones[currentZoneIndex]?.name;
+    if (!domain) return;
+
+    const hostInput = document.getElementById(isDash ? 'dash-new-record-name' : 'new-record-name') as HTMLInputElement;
+    const proxiedInput = document.getElementById(isDash ? 'dash-new-record-proxied' : 'new-record-proxied') as HTMLInputElement;
     const name = hostInput ? hostInput.value.trim() : '';
     if (!name) return;
 
-    const fullName = name.includes('.') ? name : `${name}.${zone.name}`;
-    const tokenInput = document.getElementById('input-token') as HTMLInputElement;
+    const fullName = name.includes('.') ? name : `${name}.${domain}`;
+    const tokenInput = document.getElementById(isDash ? 'dash-input-token' : 'input-token') as HTMLInputElement;
     const token = tokenInput ? tokenInput.value.trim() : '';
 
     try {
-      const res = await fetch(`/api/zones/${encodeURIComponent(zone.name)}/records`, {
+      const res = await fetch(`/api/zones/${encodeURIComponent(domain)}/records`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -937,14 +1442,22 @@ import Layout from '../layouts/Layout.astro';
         throw new Error(data.error || 'Failed to create record');
       }
 
-      const state = zoneRecordMap[zone.name];
+      const state = zoneRecordMap[domain] || { records: [], selected: new Set() };
       state.records.push(data.record);
       state.selected.add(data.record.id);
+      zoneRecordMap[domain] = state;
       hostInput.value = '';
-      renderRecordsGrid(zone.name);
+
+      if (isDash) {
+        renderDashRecordsGrid(domain);
+        showDashAlert(`Record ${fullName} created successfully!`, false);
+      } else {
+        renderRecordsGrid(domain);
+      }
       updateSummary();
     } catch (err: any) {
-      showAlert(err.message);
+      if (isDash) showDashAlert(err.message, true);
+      else showAlert(err.message);
     }
   }
 
@@ -961,11 +1474,23 @@ import Layout from '../layouts/Layout.astro';
       if (el) el.innerText = text;
     };
 
-    const intervalVal = (document.getElementById('input-interval') as HTMLInputElement)?.value || '300';
-    const histChecked = (document.getElementById('input-history') as HTMLInputElement)?.checked ?? true;
-    const autoChecked = (document.getElementById('input-autoupdate') as HTMLInputElement)?.checked ?? false;
+    const intervalVal = (document.getElementById('input-interval') as HTMLInputElement)?.value || 
+                        (document.getElementById('dash-input-interval') as HTMLInputElement)?.value || '300';
+    const histChecked = (document.getElementById('input-history') as HTMLInputElement)?.checked ?? 
+                        (document.getElementById('dash-input-history') as HTMLInputElement)?.checked ?? true;
+    const autoChecked = (document.getElementById('input-autoupdate') as HTMLInputElement)?.checked ?? 
+                        (document.getElementById('dash-input-autoupdate') as HTMLInputElement)?.checked ?? false;
 
-    // Snapshot widget
+    // Top KPI Cards
+    setTxt('kpi-records-count', totalRecords.toString());
+    setTxt('kpi-records-sub', totalRecords === 1 ? 'record' : 'records');
+    setTxt('kpi-zones-count', `${selectedZones.length} ${selectedZones.length === 1 ? 'zone' : 'zones'}`);
+    setTxt('kpi-interval-val', `${intervalVal}s`);
+    const intervalMins = Math.round(parseInt(intervalVal) / 60);
+    setTxt('kpi-interval-human', `(${intervalMins}m)`);
+    setTxt('kpi-primary-nic', preferredInterfaces.length > 0 ? preferredInterfaces[0] : (t.default_routing || 'Auto Routing'));
+
+    // Wizard Snapshot
     setTxt('snap-val-zones', `${selectedZones.length} ${selectedZones.length === 1 ? 'zone' : 'zones'}`);
     setTxt('snap-val-records', `${totalRecords} ${totalRecords === 1 ? 'record' : 'records'}`);
     setTxt('snap-val-interval', `${intervalVal}s`);
@@ -982,13 +1507,13 @@ import Layout from '../layouts/Layout.astro';
     setTxt('rev-val-autoupdate', autoChecked ? t.enabled : t.disabled);
   }
 
-  async function saveConfiguration() {
+  async function saveConfiguration(fromDashboard = false) {
     const t = translations[currentLang] || translations.en;
-    const tokenInput = document.getElementById('input-token') as HTMLInputElement;
-    const intervalInput = document.getElementById('input-interval') as HTMLInputElement;
-    const histInput = document.getElementById('input-history') as HTMLInputElement;
-    const updatesInput = document.getElementById('input-updates') as HTMLInputElement;
-    const autoInput = document.getElementById('input-autoupdate') as HTMLInputElement;
+    const tokenInput = document.getElementById(fromDashboard ? 'dash-input-token' : 'input-token') as HTMLInputElement;
+    const intervalInput = document.getElementById(fromDashboard ? 'dash-input-interval' : 'input-interval') as HTMLInputElement;
+    const histInput = document.getElementById(fromDashboard ? 'dash-input-history' : 'input-history') as HTMLInputElement;
+    const updatesInput = document.getElementById(fromDashboard ? 'dash-input-updates' : 'input-updates') as HTMLInputElement;
+    const autoInput = document.getElementById(fromDashboard ? 'dash-input-autoupdate' : 'input-autoupdate') as HTMLInputElement;
 
     const managedZones = selectedZones.map(zone => {
       const state = zoneRecordMap[zone.name];
@@ -1015,11 +1540,12 @@ import Layout from '../layouts/Layout.astro';
       managed_zones: managedZones
     };
 
-    const spin = document.getElementById('btn-spin-save');
-    const text = document.getElementById('btn-text-save');
+    const spin = document.getElementById(fromDashboard ? 'dash-btn-spin-save' : 'btn-spin-save');
+    const text = document.getElementById(fromDashboard ? 'dash-btn-text-save' : 'btn-text-save');
     if (spin) spin.classList.remove('hidden');
     if (text) text.classList.add('hidden');
-    hideAlert();
+    if (fromDashboard) hideDashAlert();
+    else hideAlert();
 
     try {
       const res = await fetch('/api/save-config', {
@@ -1032,25 +1558,28 @@ import Layout from '../layouts/Layout.astro';
         throw new Error(data.error || 'Failed to save configuration');
       }
 
-      for (let i = 1; i <= 5; i++) {
-        const el = document.getElementById(`step-${i}`);
-        if (el) el.classList.add('hidden');
-        const nav = document.getElementById(`nav-step-${i}`);
-        if (nav) {
-          nav.classList.remove('active');
-          nav.classList.add('completed');
-          const icon = nav.querySelector('.step-nav-icon');
-          if (icon) {
-            icon.className = 'step-nav-icon w-6 h-6 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5';
-            icon.innerHTML = '<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>';
+      isConfigured = true;
+
+      if (fromDashboard) {
+        showDashAlert(t.changes_saved || 'Changes saved successfully!', false);
+        updateServiceStatus();
+      } else {
+        for (let i = 1; i <= 5; i++) {
+          const el = document.getElementById(`step-${i}`);
+          if (el) el.classList.add('hidden');
+          const nav = document.getElementById(`nav-step-${i}`);
+          if (nav) {
+            nav.classList.remove('active');
+            nav.classList.add('completed');
           }
         }
+        const successEl = document.getElementById('step-success');
+        if (successEl) successEl.classList.remove('hidden');
+        updateServiceStatus();
       }
-      const successEl = document.getElementById('step-success');
-      if (successEl) successEl.classList.remove('hidden');
-      updateServiceStatus();
     } catch (err: any) {
-      showAlert(err.message);
+      if (fromDashboard) showDashAlert(err.message, true);
+      else showAlert(err.message);
     } finally {
       if (spin) spin.classList.add('hidden');
       if (text) text.classList.remove('hidden');
@@ -1059,6 +1588,18 @@ import Layout from '../layouts/Layout.astro';
 
   // Event Listeners
   document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('btn-relaunch-wizard')?.addEventListener('click', () => {
+      showView(false);
+    });
+
+    document.getElementById('btn-goto-dashboard')?.addEventListener('click', () => {
+      showView(true);
+    });
+
+    document.getElementById('dash-domain-select')?.addEventListener('change', (e) => {
+      renderDashRecordsGrid((e.target as HTMLSelectElement).value);
+    });
+
     const langSelect = document.getElementById('input-lang') as HTMLSelectElement;
     if (langSelect) {
       langSelect.addEventListener('change', (e) => {
@@ -1066,49 +1607,44 @@ import Layout from '../layouts/Layout.astro';
       });
     }
 
-    document.getElementById('btn-toggle-token')?.addEventListener('click', () => {
-      const input = document.getElementById('input-token') as HTMLInputElement;
-      const btn = document.getElementById('btn-toggle-token');
-      if (input && btn) {
-        if (input.type === 'password') {
-          input.type = 'text';
-          btn.innerText = 'Hide';
-        } else {
-          input.type = 'password';
-          btn.innerText = 'Show';
-        }
-      }
-    });
-
-    document.getElementById('zones-search')?.addEventListener('input', (e) => {
-      renderZonesGrid((e.target as HTMLInputElement).value);
-    });
-
-    document.getElementById('btn-select-all-zones')?.addEventListener('click', () => {
-      if (selectedZones.length === availableZones.length) {
-        selectedZones = [];
-      } else {
-        selectedZones = [...availableZones];
-      }
-      renderZonesGrid((document.getElementById('zones-search') as HTMLInputElement)?.value || '');
-      updateSummary();
-    });
-
-    document.querySelectorAll('.interval-chip').forEach(chip => {
-      chip.addEventListener('click', () => {
-        const val = chip.getAttribute('data-val');
-        if (val) {
-          const input = document.getElementById('input-interval') as HTMLInputElement;
-          if (input) input.value = val;
-          document.querySelectorAll('.interval-chip').forEach(c => c.className = 'interval-chip px-3 py-2.5 rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-300 font-mono text-xs sm:text-sm hover:border-zinc-700 cursor-pointer');
-          chip.className = 'interval-chip active px-3 py-2.5 rounded-lg border border-rose-500 bg-rose-500/10 text-rose-300 font-mono text-xs sm:text-sm font-semibold cursor-pointer';
-          updateSummary();
+    const setupTokenToggle = (btnId: string, inputId: string) => {
+      document.getElementById(btnId)?.addEventListener('click', () => {
+        const input = document.getElementById(inputId) as HTMLInputElement;
+        const btn = document.getElementById(btnId);
+        if (input && btn) {
+          if (input.type === 'password') {
+            input.type = 'text';
+            btn.innerText = 'Hide';
+          } else {
+            input.type = 'password';
+            btn.innerText = 'Show';
+          }
         }
       });
-    });
+    };
+    setupTokenToggle('btn-toggle-token', 'input-token');
+    setupTokenToggle('btn-dash-toggle-token', 'dash-input-token');
 
-    document.getElementById('input-history')?.addEventListener('change', updateSummary);
-    document.getElementById('input-autoupdate')?.addEventListener('change', updateSummary);
+    const setupChips = (selector: string, inputId: string) => {
+      document.querySelectorAll(selector).forEach(chip => {
+        chip.addEventListener('click', () => {
+          const val = chip.getAttribute('data-val');
+          if (val) {
+            const input = document.getElementById(inputId) as HTMLInputElement;
+            if (input) input.value = val;
+            document.querySelectorAll(selector).forEach(c => c.classList.remove('active'));
+            chip.classList.add('active');
+            updateSummary();
+          }
+        });
+      });
+    };
+    setupChips('.interval-chip', 'input-interval');
+    setupChips('.dash-interval-chip', 'dash-input-interval');
+
+    ['input-history', 'dash-input-history', 'input-autoupdate', 'dash-input-autoupdate'].forEach(id => {
+      document.getElementById(id)?.addEventListener('change', updateSummary);
+    });
 
     document.getElementById('btn-step1-next')?.addEventListener('click', validateStep1);
     document.getElementById('btn-step2-back')?.addEventListener('click', () => goToStep(1));
@@ -1148,25 +1684,35 @@ import Layout from '../layouts/Layout.astro';
       }
     });
 
-    document.getElementById('btn-add-record')?.addEventListener('click', createNewRecord);
+    document.getElementById('btn-add-record')?.addEventListener('click', () => createNewRecord(false));
+    document.getElementById('btn-dash-add-record')?.addEventListener('click', () => createNewRecord(true));
     document.getElementById('btn-step4-back')?.addEventListener('click', () => goToStep(3));
     document.getElementById('btn-step4-next')?.addEventListener('click', () => goToStep(5));
     document.getElementById('btn-step5-back')?.addEventListener('click', () => goToStep(4));
-    document.getElementById('btn-save-final')?.addEventListener('click', saveConfiguration);
+    document.getElementById('btn-save-final')?.addEventListener('click', () => saveConfiguration(false));
+    document.getElementById('btn-dash-save')?.addEventListener('click', () => saveConfiguration(true));
 
-    // One-click Copy Button
-    document.getElementById('btn-copy-cmd')?.addEventListener('click', () => {
-      const cmdText = document.getElementById('cmd-to-run')?.innerText || './c2go';
-      navigator.clipboard.writeText(cmdText).then(() => {
-        const copyTextEl = document.getElementById('btn-copy-text');
-        if (copyTextEl) {
-          copyTextEl.innerText = currentLang === 'es' ? '¡Copiado!' : 'Copied!';
-          setTimeout(() => {
-            copyTextEl.innerText = currentLang === 'es' ? 'Copiar' : 'Copy';
-          }, 2000);
+    const setupCopy = (btnId: string, cmdId: string, textId?: string) => {
+      document.getElementById(btnId)?.addEventListener('click', () => {
+        const cmdText = document.getElementById(cmdId)?.innerText || '';
+        if (cmdText) {
+          navigator.clipboard.writeText(cmdText).then(() => {
+            if (textId) {
+              const copyTextEl = document.getElementById(textId);
+              if (copyTextEl) {
+                copyTextEl.innerText = currentLang === 'es' ? '¡Copiado!' : 'Copied!';
+                setTimeout(() => {
+                  copyTextEl.innerText = currentLang === 'es' ? 'Copiar' : 'Copy';
+                }, 2000);
+              }
+            }
+          });
         }
       });
-    });
+    };
+    setupCopy('btn-copy-cmd', 'cmd-to-run', 'btn-copy-text');
+    setupCopy('btn-dash-copy-cmd', 'dash-cmd-to-run', 'dash-btn-copy-text');
+    setupCopy('btn-copy-kpi-ip', 'kpi-public-ip');
 
     loadInitial();
   });

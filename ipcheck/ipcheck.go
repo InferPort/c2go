@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"c2go/console"
 )
 
 var (
@@ -30,17 +32,24 @@ func GetPublicIP(ctx context.Context) (string, error) {
 	defer cancel()
 
 	type result struct {
-		ip  string
-		err error
+		provider string
+		ip       string
+		err      error
+		duration time.Duration
 	}
 	results := make(chan result, len(providers))
+
+	console.LogDebug("Querying %d IP providers concurrently...", len(providers))
 
 	for _, url := range providers {
 		url := url
 		go func() {
+			start := time.Now()
+			console.LogDebug("  [→] Firing request to: %s", url)
 			ip, err := fetchIP(ctx, url)
+			elapsed := time.Since(start)
 			select {
-			case results <- result{ip, err}:
+			case results <- result{provider: url, ip: ip, err: err, duration: elapsed}:
 			case <-ctx.Done():
 			}
 		}()
@@ -50,8 +59,12 @@ func GetPublicIP(ctx context.Context) (string, error) {
 		select {
 		case res := <-results:
 			if res.err == nil && isValidIP(res.ip) {
+				console.LogDebug("  [★] Provider WON the race: %s -> %s (latency: %v)", res.provider, res.ip, res.duration.Round(time.Millisecond))
+				console.LogDebug("  [⤓] Cancelling remaining provider requests")
 				cancel()
 				return res.ip, nil
+			} else if res.err != nil {
+				console.LogDebug("  [✕] Provider failed: %s (%v)", res.provider, res.err)
 			}
 		case <-ctx.Done():
 			return "", ErrNoInternet
@@ -165,14 +178,19 @@ func GetPublicIPWithInterfaces(ctx context.Context, preferredInterfaces []string
 		return GetPublicIP(ctx)
 	}
 
-	for _, ifaceName := range preferredInterfaces {
+	console.LogDebug("Resolving IP with preferred interface priority: %v", preferredInterfaces)
+
+	for i, ifaceName := range preferredInterfaces {
+		console.LogDebug("  [%d/%d] Inspecting interface '%s'...", i+1, len(preferredInterfaces), ifaceName)
 		iface, err := net.InterfaceByName(ifaceName)
 		if err != nil || iface.Flags&net.FlagUp == 0 {
+			console.LogDebug("  [!] Interface '%s' is DOWN or unavailable, trying next fallback", ifaceName)
 			continue
 		}
 
 		addrs, err := iface.Addrs()
 		if err != nil {
+			console.LogDebug("  [!] Failed reading addresses for '%s': %v", ifaceName, err)
 			continue
 		}
 
@@ -185,8 +203,11 @@ func GetPublicIPWithInterfaces(ctx context.Context, preferredInterfaces []string
 		}
 
 		if localIP == nil {
+			console.LogDebug("  [!] Interface '%s' has no valid IP assigned, trying next fallback", ifaceName)
 			continue
 		}
+
+		console.LogDebug("  [✓] Binding socket to interface '%s' (local IP: %s)", ifaceName, localIP)
 
 		// Create interface-bound client
 		boundTransport := &http.Transport{
@@ -203,26 +224,31 @@ func GetPublicIPWithInterfaces(ctx context.Context, preferredInterfaces []string
 
 		// Try providers with bound client
 		for _, url := range providers {
+			start := time.Now()
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 			if err != nil {
 				continue
 			}
 			resp, err := boundClient.Do(req)
 			if err != nil {
+				console.LogDebug("    [✕] (%s) Provider %s failed: %v", ifaceName, url, err)
 				continue
 			}
 			bodyBytes, err := io.ReadAll(resp.Body)
 			resp.Body.Close()
 			if err != nil || resp.StatusCode != http.StatusOK {
+				console.LogDebug("    [✕] (%s) Provider %s returned status %d", ifaceName, url, resp.StatusCode)
 				continue
 			}
 
 			bodyStr := strings.TrimSpace(string(bodyBytes))
+			elapsed := time.Since(start).Round(time.Millisecond)
 			if strings.Contains(url, "cdn-cgi/trace") {
 				for _, line := range strings.Split(bodyStr, "\n") {
 					if strings.HasPrefix(line, "ip=") {
 						ip := strings.TrimSpace(strings.TrimPrefix(line, "ip="))
 						if isValidIP(ip) {
+							console.LogDebug("    [★] (%s) Provider %s resolved IP: %s (%v)", ifaceName, url, ip, elapsed)
 							return ip, nil
 						}
 					}
@@ -231,11 +257,13 @@ func GetPublicIPWithInterfaces(ctx context.Context, preferredInterfaces []string
 			}
 
 			if isValidIP(bodyStr) {
+				console.LogDebug("    [★] (%s) Provider %s resolved IP: %s (%v)", ifaceName, url, bodyStr, elapsed)
 				return bodyStr, nil
 			}
 		}
 	}
 
+	console.LogDebug("All preferred interfaces failed, falling back to default system routing")
 	// Fallback to default route
 	return GetPublicIP(ctx)
 }

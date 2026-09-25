@@ -18,6 +18,7 @@ import (
 	"c2go/config"
 	"c2go/console"
 	"c2go/dns"
+	"c2go/history"
 	"c2go/i18n"
 	"c2go/ipcheck"
 
@@ -151,7 +152,12 @@ func (s *Server) handleInitialData(w http.ResponseWriter, r *http.Request) {
 		"public_ip":       "",
 	}
 
+	isConfigured := false
 	if cfg, err := config.Load(); err == nil && cfg != nil {
+		if len(cfg.ManagedZones) > 0 {
+			isConfigured = true
+			response["managed_zones"] = cfg.ManagedZones
+		}
 		if cfg.Language != "" {
 			response["language"] = cfg.Language
 		}
@@ -174,6 +180,7 @@ func (s *Server) handleInitialData(w http.ResponseWriter, r *http.Request) {
 	} else if token, err := keyring.Get(config.ServiceName, config.TokenKey); err == nil && token != "" {
 		response["token"] = token
 	}
+	response["is_configured"] = isConfigured
 
 	if ip, err := ipcheck.GetPublicIP(r.Context()); err == nil {
 		response["public_ip"] = ip
@@ -183,6 +190,17 @@ func (s *Server) handleInitialData(w http.ResponseWriter, r *http.Request) {
 		response["network_interfaces"] = ifaces
 	} else {
 		response["network_interfaces"] = []ipcheck.InterfaceInfo{}
+	}
+
+	if histPath, err := config.GetHistoryPath(); err == nil {
+		histManager := history.NewManager(histPath)
+		if entries, err := histManager.GetEntries(); err == nil && len(entries) > 0 {
+			response["history_entries"] = entries
+		} else {
+			response["history_entries"] = []history.Entry{}
+		}
+	} else {
+		response["history_entries"] = []history.Entry{}
 	}
 
 	svcInfo := detectServiceStatus()

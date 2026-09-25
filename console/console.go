@@ -60,6 +60,18 @@ func LogError(format string, a ...interface{}) {
 	fmt.Printf("%s [%s FAIL %s] %s\n", time.Now().Format("2006-01-02 15:04:05"), ColorRed, ColorReset, msg)
 }
 
+// DebugEnabled controls whether verbose debug output is printed
+var DebugEnabled = false
+
+// LogDebug prints a debug message in yellow when DebugEnabled is true
+func LogDebug(format string, a ...interface{}) {
+	if !DebugEnabled {
+		return
+	}
+	msg := fmt.Sprintf(format, a...)
+	fmt.Printf("%s [%sDEBUG%s] %s\n", time.Now().Format("2006-01-02 15:04:05"), ColorYellow, ColorReset, msg)
+}
+
 // LogWait prints a waiting status message
 func LogWait(format string, a ...interface{}) {
 	msg := fmt.Sprintf(format, a...)

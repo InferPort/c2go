@@ -40,7 +40,13 @@ func main() {
 	configFlag := flag.String("config", "", "Path to custom configuration file (e.g. /etc/c2go/config.json)")
 	updateFlag := flag.Bool("update", false, "Check for and install the latest version")
 	installServiceFlag := flag.Bool("install-service", false, "Install c2go as a systemd service (Linux only)")
+	debugFlag := flag.Bool("debug", false, "Enable verbose debug logging")
+	vFlag := flag.Bool("v", false, "Enable verbose debug logging (shorthand)")
 	flag.Parse()
+
+	if *debugFlag || *vFlag || os.Getenv("DEBUG") != "" || os.Getenv("C2GO_DEBUG") != "" {
+		console.DebugEnabled = true
+	}
 
 	if *configFlag != "" {
 		config.ConfigPathOverride = *configFlag
