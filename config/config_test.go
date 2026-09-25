@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/zalando/go-keyring"
 )
 
 func TestConfigDefaults(t *testing.T) {
@@ -151,7 +153,8 @@ func TestLoadFallbackFromPlaintext(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Load config - this should fall back to plaintext token since keyring probably doesn't have it
+	keyring.MockInit()
+	// Load config - this should fall back to plaintext token since mock keyring is empty
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)

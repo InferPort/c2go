@@ -1,0 +1,41 @@
+---
+import Button from './ui/Button.astro';
+import Badge from './ui/Badge.astro';
+---
+
+<div id="step-5" class="space-y-6 hidden">
+  <div class="space-y-2">
+    <label class="text-xs font-bold uppercase tracking-wider text-zinc-400 block" id="lbl-summary-title">Configuration Summary</label>
+    
+    <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-3.5 text-base">
+      <div class="flex justify-between items-center py-2 border-b border-zinc-800/80">
+        <span class="text-zinc-400 font-medium" id="sum-lbl-domains">Domains</span>
+        <Badge variant="dns" id="sum-domains" class="text-xs py-1 px-3">0</Badge>
+      </div>
+      <div class="flex justify-between items-center py-2 border-b border-zinc-800/80">
+        <span class="text-zinc-400 font-medium" id="sum-lbl-records">Total Records</span>
+        <Badge variant="dns" id="sum-records" class="text-xs py-1 px-3">0</Badge>
+      </div>
+      <div class="flex justify-between items-center py-2 border-b border-zinc-800/80">
+        <span class="text-zinc-400 font-medium" id="sum-lbl-interval">Interval</span>
+        <span class="font-mono text-zinc-100 font-semibold" id="sum-interval">300s</span>
+      </div>
+      <div class="flex justify-between items-center py-2 border-b border-zinc-800/80">
+        <span class="text-zinc-400 font-medium" id="sum-lbl-history">History</span>
+        <span class="text-zinc-100 font-medium" id="sum-history">Enabled</span>
+      </div>
+      <div class="flex justify-between items-center py-2">
+        <span class="text-zinc-400 font-medium" id="sum-lbl-autoupdate">Auto-Update</span>
+        <span class="text-zinc-100 font-medium" id="sum-autoupdate">Disabled</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex justify-between items-center pt-6 border-t border-zinc-800/80">
+    <Button id="btn-step5-back" variant="secondary">Back</Button>
+    <Button id="btn-save-final" variant="primary">
+      <span id="btn-text-save">Save & Finish Setup</span>
+      <span id="btn-spin-save" class="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin hidden"></span>
+    </Button>
+  </div>
+</div>

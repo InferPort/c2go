@@ -1,0 +1,20 @@
+---
+import Button from './ui/Button.astro';
+---
+
+<div id="step-2" class="space-y-6 hidden">
+  <div class="space-y-2">
+    <label class="text-xs font-bold uppercase tracking-wider text-zinc-400 block" id="lbl-select-zones">Select Domains to Manage</label>
+    <span class="text-sm text-zinc-400 block" id="lbl-select-zones-desc">Choose one or more Cloudflare zones you want c2go to update.</span>
+    
+    <div id="zones-list" class="mt-4 space-y-3 max-h-80 overflow-y-auto pr-1"></div>
+  </div>
+
+  <div class="flex justify-between items-center pt-6 border-t border-zinc-800/80">
+    <Button id="btn-step2-back" variant="secondary">Back</Button>
+    <Button id="btn-step2-next" variant="primary">
+      <span id="btn-text-step2">Continue</span>
+      <span id="btn-spin-step2" class="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin hidden"></span>
+    </Button>
+  </div>
+</div>

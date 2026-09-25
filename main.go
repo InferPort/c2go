@@ -23,6 +23,7 @@ import (
 	"c2go/i18n"
 	"c2go/ipcheck"
 	"c2go/update"
+	"c2go/web"
 
 	"github.com/zalando/go-keyring"
 	"golang.org/x/term"
@@ -32,7 +33,10 @@ var createNewOption = "[+] Create new A record"
 var goBackOption = "[ < Go back to domain selection ]"
 
 func main() {
-	setupFlag := flag.Bool("setup", false, "Run the interactive setup configuration")
+	setupFlag := flag.Bool("setup", false, "Run the interactive setup configuration (CLI)")
+	webSetupFlag := flag.Bool("web-setup", false, "Run the web setup configuration wizard (default: 127.0.0.1:8080)")
+	hostFlag := flag.String("host", "", "Host for web setup server (default: 127.0.0.1 or CONFIG_HOST env)")
+	portFlag := flag.Int("port", 0, "Port for web setup server (default: 8080 or CONFIG_PORT env)")
 	configFlag := flag.String("config", "", "Path to custom configuration file (e.g. /etc/c2go/config.json)")
 	updateFlag := flag.Bool("update", false, "Check for and install the latest version")
 	installServiceFlag := flag.Bool("install-service", false, "Install c2go as a systemd service (Linux only)")
@@ -58,6 +62,19 @@ func main() {
 	// 1. Update Mode
 	if *updateFlag {
 		runUpdate()
+		os.Exit(0)
+	}
+
+	// 1.5. Web Setup Mode
+	if *webSetupFlag {
+		srv := web.NewServer(*hostFlag, *portFlag)
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer cancel()
+
+		if err := srv.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			console.LogError("Web setup server error: %v", err)
+			os.Exit(1)
+		}
 		os.Exit(0)
 	}
 
@@ -606,7 +623,7 @@ func runWorker(ctx context.Context, cfg *config.Config, provider dns.Provider, h
 }
 
 func performUpdate(ctx context.Context, cfg *config.Config, provider dns.Provider, histManager *history.Manager, lastIP string) (string, error) {
-	ip, err := ipcheck.GetPublicIP(ctx)
+	ip, err := ipcheck.GetPublicIPWithInterfaces(ctx, cfg.PreferredInterfaces)
 	if err != nil {
 		if errors.Is(err, ipcheck.ErrNoInternet) {
 			console.LogWait("%s", i18n.T("no_internet_waiting"))

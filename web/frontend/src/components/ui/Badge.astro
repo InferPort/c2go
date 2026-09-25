@@ -1,0 +1,19 @@
+---
+interface Props {
+  variant?: 'proxied' | 'dns' | 'brand';
+  class?: string;
+  id?: string;
+}
+
+const { variant = 'dns', class: className = '', id } = Astro.props;
+
+const variants = {
+  brand: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
+  proxied: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+  dns: 'bg-zinc-800 text-zinc-300 border-zinc-700',
+};
+---
+
+<span id={id} class={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border font-mono tracking-wide ${variants[variant]} ${className}`}>
+  <slot />
+</span>

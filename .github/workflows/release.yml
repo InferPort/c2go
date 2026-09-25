@@ -2,6 +2,8 @@ name: Release
 
 on:
   push:
+    tags:
+      - 'v*'
     branches:
       - main
 
@@ -10,11 +12,12 @@ permissions:
 
 jobs:
   build:
-    name: Build Binary
+    name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
+          # Linux
           - goos: linux
             goarch: amd64
             binary_name: c2go
@@ -31,6 +34,16 @@ jobs:
             goarch: arm64
             binary_name: c2go
             archive_name: c2go-linux-arm64.tar.gz
+          # macOS (Darwin)
+          - goos: darwin
+            goarch: amd64
+            binary_name: c2go
+            archive_name: c2go-darwin-amd64.tar.gz
+          - goos: darwin
+            goarch: arm64
+            binary_name: c2go
+            archive_name: c2go-darwin-arm64.tar.gz
+          # Windows
           - goos: windows
             goarch: amd64
             binary_name: c2go.exe
@@ -48,21 +61,45 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/frontend/package-lock.json
+
+      - name: Build Web Frontend
+        run: |
+          cd web/frontend
+          npm ci
+          npm run build
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26"
+          go-version: "stable"
+          cache: true
 
-      - name: Download dependencies
+      - name: Download Go dependencies
         run: go mod download
+
+      - name: Determine Version Tag
+        id: tag_info
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=v0.1.${{ github.run_number }}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Build binary
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
+          mkdir -p build
           go build -v \
-            -ldflags="-X c2go/update.Version=v0.1.${{ github.run_number }}" \
+            -ldflags="-s -w -X c2go/update.Version=${{ steps.tag_info.outputs.VERSION }}" \
             -o build/${{ matrix.binary_name }} .
 
       - name: Package binary
@@ -103,31 +140,34 @@ jobs:
           sha256sum * > sha256sums.txt
           cat sha256sums.txt
 
-      - name: Generate Release Notes
-        id: release_notes
+      - name: Determine Version Tag & Release Notes
+        id: release_info
         run: |
-          # Fetch all tags
-          git fetch --tags --unshallow || git fetch --tags
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+          else
+            TAG_NAME="v0.1.${{ github.run_number }}"
+          fi
+          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
 
-          # Find the previous tag
+          git fetch --tags --unshallow || git fetch --tags 2>/dev/null || true
           PREV_TAG=$(git tag --sort=-v:refname | head -n 1)
 
-          echo "### Commits in this release" > release_notes.md
+          echo "### c2go Release $TAG_NAME" > release_notes.md
           echo "" >> release_notes.md
+          echo "#### Changes:" >> release_notes.md
 
-          if [ -z "$PREV_TAG" ]; then
-            echo "No previous release tag found. Listing all commits."
-            git log --oneline | sed 's/^/- /' >> release_notes.md
+          if [ -z "$PREV_TAG" ] || [ "$PREV_TAG" = "$TAG_NAME" ]; then
+            git log -n 15 --oneline | sed 's/^/- /' >> release_notes.md
           else
-            echo "Listing commits between $PREV_TAG and HEAD"
             git log --oneline ${PREV_TAG}..HEAD | sed 's/^/- /' >> release_notes.md
           fi
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.1.${{ github.run_number }}
-          name: Release v0.1.${{ github.run_number }}
+          tag_name: ${{ steps.release_info.outputs.TAG_NAME }}
+          name: Release ${{ steps.release_info.outputs.TAG_NAME }}
           body_path: release_notes.md
           files: artifacts/*
         env:

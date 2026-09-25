@@ -1,0 +1,37 @@
+---
+import Button from './ui/Button.astro';
+import Input from './ui/Input.astro';
+import Badge from './ui/Badge.astro';
+---
+
+<div id="step-3" class="space-y-6 hidden">
+  <div class="space-y-2">
+    <div class="flex justify-between items-center">
+      <label class="text-xs font-bold uppercase tracking-wider text-zinc-400 block" id="lbl-select-records">Select Records to Monitor</label>
+      <Badge variant="proxied" id="zone-progress-badge" class="text-xs py-1 px-3">Domain 1 of 1</Badge>
+    </div>
+    <span class="text-sm text-zinc-400 block" id="lbl-select-records-desc">Select existing A records or create a new one.</span>
+    
+    <div id="records-list" class="mt-4 space-y-3 max-h-72 overflow-y-auto pr-1"></div>
+
+    <!-- Create new record drawer/card -->
+    <div class="mt-6 p-5 bg-zinc-900/80 border border-dashed border-zinc-700/80 rounded-xl space-y-3.5">
+      <span class="text-sm font-semibold text-zinc-200 block" id="lbl-create-record-title">Or create a new A record:</span>
+      <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-3 items-center">
+        <Input id="new-record-name" placeholder="subdomain (e.g. vpn)" mono={true} />
+        <label class="flex items-center gap-2.5 text-sm font-medium text-zinc-200 cursor-pointer select-none px-3 py-2 bg-zinc-850 rounded-xl border border-zinc-750">
+          <input type="checkbox" id="new-record-proxied" class="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-rose-600 focus:ring-rose-500">
+          <span>Proxy</span>
+        </label>
+        <Button id="btn-add-record" variant="secondary" class="py-3 px-5 text-sm">Add Record</Button>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex justify-between items-center pt-6 border-t border-zinc-800/80">
+    <Button id="btn-step3-back" variant="secondary">Back</Button>
+    <Button id="btn-step3-next" variant="primary">
+      <span id="btn-text-step3">Next Domain</span>
+    </Button>
+  </div>
+</div>

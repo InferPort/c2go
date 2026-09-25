@@ -22,13 +22,14 @@ type ManagedZone struct {
 }
 
 type Config struct {
-	ManagedZones    []ManagedZone `json:"managed_zones"`
-	HistoryEnabled  bool          `json:"history_enabled"`
-	UpdateInterval  int           `json:"update_interval"`
-	UpdateCheck     *bool         `json:"update_check"`
-	AutoUpdate      *bool         `json:"auto_update"`
-	Language        string        `json:"language"`
-	CloudflareToken string        `json:"-"`
+	ManagedZones        []ManagedZone `json:"managed_zones"`
+	PreferredInterfaces []string      `json:"preferred_interfaces,omitempty"`
+	HistoryEnabled      bool          `json:"history_enabled"`
+	UpdateInterval      int           `json:"update_interval"`
+	UpdateCheck         *bool         `json:"update_check"`
+	AutoUpdate          *bool         `json:"auto_update"`
+	Language            string        `json:"language"`
+	CloudflareToken     string        `json:"-"`
 }
 
 var ConfigPathOverride string

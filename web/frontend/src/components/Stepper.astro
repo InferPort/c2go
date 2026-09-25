@@ -1,0 +1,38 @@
+---
+const steps = [
+  { id: 1, label: 'Auth' },
+  { id: 2, label: 'Zones' },
+  { id: 3, label: 'Records' },
+  { id: 4, label: 'Settings' },
+  { id: 5, label: 'Finish' },
+];
+---
+
+<div class="relative flex justify-between items-center mb-10 px-4 sm:px-8">
+  <div class="absolute top-5 left-8 right-8 h-0.5 bg-zinc-800 -z-0"></div>
+  {steps.map((step) => (
+    <div class="relative z-10 flex flex-col items-center gap-2 step-item" id={`step-nav-${step.id}`}>
+      <div class="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-zinc-900 border-2 border-zinc-800 flex items-center justify-center text-sm font-bold text-zinc-500 transition-all duration-200 step-dot">
+        {step.id}
+      </div>
+      <span class="text-xs sm:text-sm font-semibold text-zinc-500 step-label" id={`step-lbl-${step.id}`}>{step.label}</span>
+    </div>
+  ))}
+</div>
+
+<style>
+  :global(.step-item.active .step-dot) {
+    background-color: rgb(225, 29, 72);
+    border-color: rgb(225, 29, 72);
+    color: white;
+    box-shadow: 0 0 16px rgba(225, 29, 72, 0.5);
+  }
+  :global(.step-item.active .step-label) {
+    color: rgb(244, 244, 245);
+  }
+  :global(.step-item.completed .step-dot) {
+    background-color: rgb(39, 39, 42);
+    border-color: rgb(16, 185, 129);
+    color: rgb(16, 185, 129);
+  }
+</style>

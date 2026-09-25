@@ -1,0 +1,24 @@
+---
+import Button from './ui/Button.astro';
+import Input from './ui/Input.astro';
+import Switch from './ui/Switch.astro';
+---
+
+<div id="step-4" class="space-y-6 hidden">
+  <div class="space-y-2">
+    <label class="text-xs font-bold uppercase tracking-wider text-zinc-400 block" id="lbl-interval">Check Interval (Seconds)</label>
+    <span class="text-sm text-zinc-400 block" id="lbl-interval-desc">Frequency of fallback IP checks (minimum 60s recommended).</span>
+    <Input id="input-interval" type="number" value="300" min="30" mono={true} />
+  </div>
+
+  <div class="space-y-1 pt-3">
+    <Switch id="input-history" label="IP Change History" desc="Log IP changes locally to audit history." checked={true} />
+    <Switch id="input-updates" label="Check GitHub Updates" desc="Notify when a new version of c2go is released." checked={true} />
+    <Switch id="input-autoupdate" label="Automatic Self-Update" desc="Download and apply new releases automatically." checked={false} />
+  </div>
+
+  <div class="flex justify-between items-center pt-6 border-t border-zinc-800/80">
+    <Button id="btn-step4-back" variant="secondary">Back</Button>
+    <Button id="btn-step4-next" variant="primary">Review & Save</Button>
+  </div>
+</div>

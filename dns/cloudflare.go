@@ -310,6 +310,59 @@ func (p *CloudflareProvider) ListARecords(ctx context.Context, domain string) ([
 	return names, nil
 }
 
+type DNSRecordDetail struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	Content string `json:"content"`
+	Proxied bool   `json:"proxied"`
+}
+
+func (p *CloudflareProvider) ListDNSRecordsDetails(ctx context.Context, domain string) ([]DNSRecordDetail, error) {
+	zoneID, err := p.zoneIDByName(ctx, domain)
+	if err != nil {
+		return nil, err
+	}
+
+	recordMap := make(map[string]bool)
+	var details []DNSRecordDetail
+
+	path := fmt.Sprintf("/zones/%s/dns_records", zoneID)
+	err = p.requestAllPages(ctx, "GET", path, nil, nil, func(raw json.RawMessage) bool {
+		var page cfDNSRecordListResponse
+		if err := json.Unmarshal(raw, &page.Result); err != nil {
+			return false
+		}
+		for _, r := range page.Result {
+			if r.Type == "A" || r.Type == "AAAA" {
+				shortName := r.Name
+				if shortName == domain {
+					shortName = "@"
+				} else if strings.HasSuffix(shortName, "."+domain) {
+					shortName = strings.TrimSuffix(shortName, "."+domain)
+				}
+
+				if !recordMap[shortName] {
+					recordMap[shortName] = true
+					details = append(details, DNSRecordDetail{
+						ID:      shortName,
+						Name:    shortName,
+						Type:    r.Type,
+						Content: r.Content,
+						Proxied: r.Proxied,
+					})
+				}
+			}
+		}
+		return true
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return details, nil
+}
+
 func (p *CloudflareProvider) CreateARecord(ctx context.Context, domain, recordName, ip string, proxied bool) error {
 	zoneID, err := p.zoneIDByName(ctx, domain)
 	if err != nil {
